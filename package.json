@@ -1,0 +1,33 @@
+{
+  "name": "trilium-style-notes",
+  "version": "1.0.0",
+  "description": "A Trilium Notes-inspired hierarchical note-taking app with SQLite, nested tree, cloning, attributes, and Boxicons.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js --watch",
+    "init-db": "node src/db.js --init",
+    "status": "node src/db.js --status",
+    "electron": "electron src/electron/main.js",
+    "seed": "node src/db.js --seed"
+  },
+  "keywords": [
+    "notes",
+    "trilium",
+    "sqlite",
+    "hierarchy",
+    "knowledge-base",
+    "boxicons"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  },
+  "optionalDependencies": {
+    "electron": "^32.3.3"
+  }
+}

@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# SQLite database files (local data — never commit)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

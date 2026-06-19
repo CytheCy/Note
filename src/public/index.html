@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trilium-Style Notes</title>
+
+    <!-- Boxicons (Trilium's icon ecosystem) -->
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" />
+
+    <!-- App styles -->
+    <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+    <!-- ====================== TOP BAR ====================== -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <i class="bx bx-cube logo-icon"></i>
+            <span class="app-title">Notes</span>
+        </div>
+        <div class="topbar-center">
+            <div class="global-search">
+                <i class="bx bx-search"></i>
+                <input id="globalSearch" type="text" placeholder="Search notes…" autocomplete="off" />
+                <ul id="searchResults" class="search-results" hidden></ul>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <button id="newRootNoteBtn" class="btn btn-ghost" title="New top-level note">
+                <i class="bx bx-file-plus"></i>
+            </button>
+            <button id="toggleSidebarBtn" class="btn btn-ghost" title="Toggle sidebar">
+                <i class="bx bx-menu"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- ====================== MAIN SPLIT ====================== -->
+    <main class="layout">
+        <!-- ---------- LEFT: TREE ---------- -->
+        <aside id="sidebar" class="pane pane-sidebar">
+            <div class="pane-header">
+                <span><i class="bx bx-folder-open"></i> Note Tree</span>
+            </div>
+            <div id="tree" class="tree" role="tree">
+                <!-- tree nodes injected by tree.js -->
+                <div class="tree-empty">Loading…</div>
+            </div>
+        </aside>
+
+        <!-- ---------- DIVIDER ---------- -->
+        <div id="resizer" class="resizer" title="Drag to resize"></div>
+
+        <!-- ---------- RIGHT: EDITOR ---------- -->
+        <section id="editorPane" class="pane pane-editor">
+            <!-- Note title bar -->
+            <div class="editor-titlebar">
+                <i id="noteTypeIcon" class="bx bx-file"></i>
+                <input id="noteTitle" type="text" placeholder="Note title" disabled />
+                <select id="noteTypeSelect" title="Note type" disabled>
+                    <option value="text">Text</option>
+                    <option value="code">Code</option>
+                    <option value="todo">To-do</option>
+                    <option value="search">Search</option>
+                </select>
+                <span id="noteMeta" class="note-meta"></span>
+            </div>
+
+            <!-- Attributes strip (Trilium-style labels/relations) -->
+            <div id="attributesBar" class="attributes-bar">
+                <div class="attr-label"><i class="bx bx-tag"></i> Attributes</div>
+                <div id="attributesList" class="attributes-list"></div>
+                <button id="addAttrBtn" class="btn btn-mini" disabled>
+                    <i class="bx bx-plus"></i> Add
+                </button>
+            </div>
+
+            <!-- Editor body — switches between contenteditable / textarea -->
+            <div id="editorBody" class="editor-body">
+                <div id="emptyState" class="empty-state">
+                    <i class="bx bx-note"></i>
+                    <p>Select or create a note to begin.</p>
+                </div>
+                <div id="richTextEditor" class="rich-text-editor" contenteditable="true" hidden></div>
+                <textarea id="codeEditor" class="code-editor" hidden spellcheck="false"></textarea>
+            </div>
+
+            <!-- Formatting toolbar for the WYSIWYG editor -->
+            <div id="formatToolbar" class="format-toolbar" hidden>
+                <button data-cmd="bold" title="Bold"><i class="bx bx-bold"></i></button>
+                <button data-cmd="italic" title="Italic"><i class="bx bx-italic"></i></button>
+                <button data-cmd="underline" title="Underline"><i class="bx bx-underline"></i></button>
+                <span class="sep"></span>
+                <button data-cmd="formatBlock" data-val="H1" title="Heading 1">H1</button>
+                <button data-cmd="formatBlock" data-val="H2" title="Heading 2">H2</button>
+                <button data-cmd="formatBlock" data-val="P" title="Paragraph">¶</button>
+                <span class="sep"></span>
+                <button data-cmd="insertUnorderedList" title="Bulleted list"><i class="bx bx-list-ul"></i></button>
+                <button data-cmd="insertOrderedList" title="Numbered list"><i class="bx bx-list-ol"></i></button>
+                <button data-cmd="formatBlock" data-val="BLOCKQUOTE" title="Quote"><i class="bx bx-quote-left"></i></button>
+                <span class="sep"></span>
+                <button data-cmd="createLink" title="Link"><i class="bx bx-link"></i></button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ====================== CONTEXT MENU ====================== -->
+    <div id="ctxMenu" class="context-menu" hidden>
+        <button data-action="create-child"><i class="bx bx-file-plus"></i> Create Child Note</button>
+        <button data-action="create-folder"><i class="bx bx-folder-plus"></i> Create Folder</button>
+        <button data-action="rename"><i class="bx bx-rename"></i> Rename</button>
+        <button data-action="clone"><i class="bx bx-copy-alt"></i> Clone to…</button>
+        <div class="ctx-sep"></div>
+        <button data-action="expand-all"><i class="bx bx-expand-alt"></i> Expand All</button>
+        <button data-action="collapse-all"><i class="bx bx-collapse-alt"></i> Collapse All</button>
+        <div class="ctx-sep"></div>
+        <button data-action="properties"><i class="bx bx-cog"></i> Note Properties</button>
+        <button data-action="delete" class="danger"><i class="bx bx-trash"></i> Delete</button>
+    </div>
+
+    <!-- ====================== PROPERTIES MODAL ====================== -->
+    <div id="modalOverlay" class="modal-overlay" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="bx bx-cog"></i> Note Properties</h3>
+                <button class="modal-close" data-close aria-label="Close">
+                    <i class="bx bx-x"></i><span class="close-x-fallback">✕</span>
+                </button>
+            </div>
+            <div class="modal-body" id="propsBody">
+                <!-- injected -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" data-close>Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====================== SCRIPTS ====================== -->
+    <script src="/js/api.js"></script>
+    <script src="/js/tree.js"></script>
+    <script src="/js/attributes.js"></script>
+    <script src="/js/editor.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
