@@ -22,18 +22,37 @@
         await TreeView.createChild('root', 'text', 'New Note');
     });
 
+    // ---- sidebar "add note" button ---------------------------------------
+    // Creates a new note: as a child of the selected note if one is selected
+    // (and is not the root), otherwise as a top-level note.
+    document.getElementById('newNoteBtn').addEventListener('click', async () => {
+        const { noteId } = TreeView.getSelected();
+        const parent = noteId || 'root';
+        await TreeView.createChild(parent, 'text', 'New Note');
+    });
+
+    // ---- native File menu (Electron) -------------------------------------
+    // The native application menu emits these events via webContents.send.
+    // Fallbacks keep things working in a plain browser (no Electron IPC).
+    initNativeMenu();
+
+    // ---- Settings modal + theme switching --------------------------------
+    initSettings();
+
     const sidebar = document.getElementById('sidebar');
     document.getElementById('toggleSidebarBtn').addEventListener('click', () => {
         sidebar.classList.toggle('collapsed');
     });
 
     // ---- modal close ------------------------------------------------------
-    const overlay = document.getElementById('modalOverlay');
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay || e.target.closest('[data-close]')) overlay.hidden = true;
+    // Applies to every .modal-overlay (Properties + Settings).
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay || e.target.closest('[data-close]')) overlay.hidden = true;
+        });
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') overlay.hidden = true;
+        if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(o => o.hidden = true);
     });
 
     // ---- sidebar resizer --------------------------------------------------
@@ -143,4 +162,63 @@ function escapeHtml(s) {
     return (s || '').replace(/[&<>"']/g, c => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
     })[c]);
+}
+
+// ============================== NATIVE MENU (Electron) =====================
+// The native File menu sends IPC events; we receive them here. When not
+// running under Electron (plain browser), these simply never fire.
+function initNativeMenu() {
+    const api = window.electronAPI;   // exposed by preload.js (no nodeIntegration)
+    const handlers = {
+        'menu:new-note': async () => {
+            const { noteId } = TreeView.getSelected();
+            await TreeView.createChild(noteId || 'root', 'text', 'New Note');
+        },
+        'menu:new-folder': async () => {
+            const { noteId } = TreeView.getSelected();
+            await TreeView.createChild(noteId || 'root', 'text', 'New Folder');
+        },
+        'menu:settings': () => openSettings(),
+    };
+    Object.entries(handlers).forEach(([ch, fn]) => {
+        if (api && typeof api.on === 'function') {
+            api.on(ch, () => Promise.resolve(fn()).catch(e => alert('Action failed: ' + e.message)));
+        }
+    });
+}
+
+// ============================== SETTINGS / THEME ==========================
+function getStoredTheme() {
+    try { return localStorage.getItem('theme') || 'auto'; }
+    catch (_) { return 'auto'; }
+}
+
+function applyTheme(value) {
+    const v = ['light', 'dark', 'auto'].includes(value) ? value : 'auto';
+    document.documentElement.setAttribute('data-theme', v);
+    try { localStorage.setItem('theme', v); } catch (_) {}
+    // Sync the selected option in the Settings modal, if open.
+    document.querySelectorAll('#themeOptions .theme-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.value === v);
+    });
+    document.querySelectorAll('input[name="theme"]').forEach(r => {
+        r.checked = r.value === v;
+    });
+}
+
+function openSettings() {
+    applyTheme(getStoredTheme());   // refresh selected highlight
+    document.getElementById('settingsOverlay').hidden = false;
+}
+
+function initSettings() {
+    // Ensure the saved theme is reflected in the UI on first paint.
+    applyTheme(getStoredTheme());
+
+    // Clicking an option card switches the theme immediately and persists it.
+    document.getElementById('themeOptions').addEventListener('click', (e) => {
+        const opt = e.target.closest('.theme-option');
+        if (!opt) return;
+        applyTheme(opt.dataset.value);
+    });
 }

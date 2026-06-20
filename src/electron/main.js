@@ -11,7 +11,7 @@
 
 'use strict';
 
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execSync } = require('child_process');
@@ -92,12 +92,82 @@ async function createWindow() {
         minWidth: 720,
         minHeight: 480,
         backgroundColor: '#fafafa',
-        title: 'Trilium-Style Notes',
+        title: '',
         webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
+            preload: path.join(__dirname, 'preload.js'),
         },
     });
+
+    // Native application menu. "Settings" lives under File and tells the
+    // renderer (via webContents.send) to open the in-app Settings modal.
+    const template = [
+        {
+            label: 'File',
+            submenu: [
+                {
+                    label: 'New Note',
+                    accelerator: 'CmdOrCtrl+N',
+                    click: () => win.webContents.send('menu:new-note'),
+                },
+                {
+                    label: 'New Folder',
+                    click: () => win.webContents.send('menu:new-folder'),
+                },
+                { type: 'separator' },
+                {
+                    label: 'Settings…',
+                    click: () => win.webContents.send('menu:settings'),
+                },
+                { type: 'separator' },
+                { role: 'quit' },
+            ],
+        },
+        {
+            label: 'Edit',
+            submenu: [
+                { role: 'undo' },
+                { role: 'redo' },
+                { type: 'separator' },
+                { role: 'cut' },
+                { role: 'copy' },
+                { role: 'paste' },
+                { role: 'selectAll' },
+            ],
+        },
+        {
+            label: 'View',
+            submenu: [
+                { role: 'reload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' },
+            ],
+        },
+        {
+            label: 'Help',
+            submenu: [
+                {
+                    label: 'About',
+                    click: () => {
+                        const { dialog } = require('electron');
+                        dialog.showMessageBox(win, {
+                            type: 'info',
+                            title: 'About',
+                            message: 'Trilium-Style Notes',
+                            detail: 'A hierarchical note-taking desktop app.',
+                        });
+                    },
+                },
+            ],
+        },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 
     // open external links in the user's browser, not inside the app
     win.webContents.setWindowOpenHandler(({ url }) => {
