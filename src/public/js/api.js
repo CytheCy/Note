@@ -34,12 +34,6 @@ const Api = {
     updateNote:   (id, b)      => Api._req('PUT',    `/notes/${id}`,  b),
     deleteRelation:(rid)       => Api._req('DELETE', `/notes/relation/${rid}`),
 
-    // attributes
-    getAttributes:(id)         => Api._req('GET',    `/notes/${id}/attributes`),
-    addAttribute: (id, b)      => Api._req('POST',   `/notes/${id}/attributes`, b),
-    updateAttribute:(aid, b)   => Api._req('PUT',    `/attributes/${aid}`, b),
-    deleteAttribute:(aid)      => Api._req('DELETE', `/attributes/${aid}`),
-
     // search
     search:       (q)          => Api._req('GET',    `/search?q=${encodeURIComponent(q)}`),
 };

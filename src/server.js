@@ -4,7 +4,7 @@
  * Endpoints (all JSON):
  *   GET    /api/tree                       → full subtree under root
  *   GET    /api/tree/:parentId             → children of a parent
- *   GET    /api/notes/:noteId              → one note (+ its attributes)
+ *   GET    /api/notes/:noteId              → one note (+ its parents)
  *   POST   /api/notes                      { parentId, title?, type?, content? } → new note
  *   PUT    /api/notes/:noteId              { title?, content?, type? }
  *   DELETE /api/notes/relation/:relationId → detach (soft-delete) a clone
@@ -13,11 +13,6 @@
  *   POST   /api/tree/reorder               { parentId, relationIds:[] }
  *   POST   /api/tree/expand                { relationId, isExpanded }
  *   POST   /api/tree/clone                 { noteId, newParentId }
- *
- *   GET    /api/notes/:noteId/attributes
- *   POST   /api/notes/:noteId/attributes   { type, name, value }
- *   PUT    /api/attributes/:attributeId    { type, name, value }
- *   DELETE /api/attributes/:attributeId
  *
  *   GET    /api/search?q=...
  */
@@ -28,7 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
-const { Notes, Tree, Attributes, ROOT_ID } = require('./db');
+const { Notes, Tree, ROOT_ID } = require('./db');
 
 const app = express();
 app.use(cors());
@@ -79,7 +74,6 @@ app.post('/api/tree/clone', (req, res) => {
 app.get('/api/notes/:noteId', (req, res) => {
     const note = Notes.get(req.params.noteId);
     if (!note || note.isDeleted) return res.status(404).json({ error: 'not found' });
-    note.attributes = Attributes.list(note.noteId);
     note.parents = db_parents(note.noteId);
     res.json(note);
 });
@@ -107,30 +101,6 @@ app.put('/api/notes/:noteId', (req, res) => {
 app.delete('/api/notes/relation/:relationId', (req, res) => {
     const ok = Notes.removeRelation(req.params.relationId);
     if (!ok) return res.status(404).json({ error: 'relation not found' });
-    res.json({ ok: true });
-});
-
-// ---------------------------------------------------------------------------
-//  Attributes
-// ---------------------------------------------------------------------------
-app.get('/api/notes/:noteId/attributes', (req, res) => {
-    res.json(Attributes.list(req.params.noteId));
-});
-
-app.post('/api/notes/:noteId/attributes', (req, res) => {
-    const { type = 'label', name, value = '' } = req.body;
-    if (!name) return res.status(400).json({ error: 'name required' });
-    Attributes.add({ noteId: req.params.noteId, type, name, value });
-    res.status(201).json(Attributes.list(req.params.noteId));
-});
-
-app.put('/api/attributes/:attributeId', (req, res) => {
-    Attributes.update(req.params.attributeId, req.body || {});
-    res.json({ ok: true });
-});
-
-app.delete('/api/attributes/:attributeId', (req, res) => {
-    Attributes.remove(req.params.attributeId);
     res.json({ ok: true });
 });
 

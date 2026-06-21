@@ -232,24 +232,6 @@ button { font-family: inherit; cursor: pointer; }
 }
 .note-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 
-/* attributes strip */
-.attributes-bar {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 7px 14px; border-bottom: 1px solid var(--border); background: var(--surface-alt); min-height: 38px;
-}
-.attr-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
-.attributes-list { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
-.attr-chip {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: var(--accent-soft); border: 1px solid #cfe0ff; color: #16407f;
-    border-radius: 12px; padding: 2px 8px; font-size: 12px;
-}
-.attr-chip.relation { background: #fff1d6; border-color: #f0d28a; color: #8a5a00; }
-.attr-chip .attr-name { font-weight: 600; }
-.attr-chip .attr-value { opacity: .85; }
-.attr-chip .attr-x { cursor: pointer; opacity: .55; }
-.attr-chip .attr-x:hover { opacity: 1; }
-
 /* editor body */
 .editor-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .empty-state {

@@ -15,7 +15,7 @@ const TreeView = (() => {
     const elCtx  = document.getElementById('ctxMenu');
 
     // ---- Trilium-style icon mapping ----------------------------------------
-    // Default icon + per-type override + per-attribute override.
+    // Default icon + per-type override + folder icon for parents.
     const NOTE_TYPE_ICON = {
         text:   'bx bx-file',
         code:   'bx bx-code-alt',
@@ -38,11 +38,6 @@ const TreeView = (() => {
     }
 
     function iconFor(node) {
-        if (node.attributes) {
-            // allow iconClass label to override (Trilium behaviour)
-            const ic = node.attributes.find(a => a.name === 'iconClass' && a.type === 'label');
-            if (ic && ic.value) return ic.value;
-        }
         if (isFolder(node)) {
             return node.isExpanded ? FOLDER_OPEN : FOLDER_CLOSED;
         }
@@ -391,7 +386,6 @@ const TreeView = (() => {
             ['dateCreated',  full.dateCreated],
             ['dateModified', full.dateModified],
             ['parents',      (full.parents || []).map(p => p.title).join(', ') || '(root)'],
-            ['attributes',   (full.attributes || []).length],
         ];
         body.innerHTML = rows.map(([k, v]) =>
             `<div class="prop-row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');

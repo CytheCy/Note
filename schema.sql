@@ -4,7 +4,6 @@
 --   * notes          → content & metadata (one logical note = one row)
 --   * note_relations → the TREE (many-to-many: enables CLONING — one note
 --                      can live under multiple parents)
---   * attributes     → Trilium labels (key=value) and relations (value=noteId)
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -58,24 +57,6 @@ CREATE TABLE IF NOT EXISTS note_relations (
 CREATE INDEX IF NOT EXISTS idx_rel_parent_sort
     ON note_relations (parentId, sortOrder, noteId);
 CREATE INDEX IF NOT EXISTS idx_rel_note            ON note_relations (noteId);
-
--- ---------------------------------------------------------------------------
---  attributes — Trilium labels & relations
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS attributes (
-    attributeId   TEXT    PRIMARY KEY,
-    noteId        TEXT    NOT NULL REFERENCES notes(noteId) ON DELETE CASCADE,
-    type          TEXT    NOT NULL CHECK (type IN ('label','relation')),
-    name          TEXT    NOT NULL,                 -- e.g. "color", "inbox"
-    value         TEXT    NOT NULL DEFAULT '',      -- for relations: target noteId
-    position      INTEGER NOT NULL DEFAULT 0,
-    isInheritable INTEGER NOT NULL DEFAULT 0,        -- propagate to children (Trilium)
-    dateCreated   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    isDeleted     INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_attr_note        ON attributes (noteId);
-CREATE INDEX IF NOT EXISTS idx_attr_name_value  ON attributes (name, value);
 
 -- ---------------------------------------------------------------------------
 --  Root note

@@ -2,8 +2,7 @@
 
 A hierarchical note-taking desktop application inspired by [Trilium Notes](https://github.com/zadam/trilium).
 It features a deeply-nestable notes tree, **note cloning** (a single note can appear in multiple
-places in the tree), Trilium-style **attributes** (labels & relations), and the **Boxicons** icon
-ecosystem that Trilium uses.
+places in the tree), and the **Boxicons** icon ecosystem that Trilium uses.
 
 ## Architecture
 
@@ -26,12 +25,11 @@ Notes/
     │   └── main.js         # Electron desktop wrapper
     └── public/
         ├── index.html      # Three-pane split layout
-        ├── css/styles.css  # Tree, editor, attributes styling
+        ├── css/styles.css  # Tree & editor styling
         └── js/
             ├── api.js      # Tiny fetch() wrapper
             ├── tree.js     # Recursive tree render, drag-drop, context menu
             ├── editor.js   # Note editor + autosave
-            ├── attributes.js # Attribute panel (labels/relations)
             └── app.js      # Glue / bootstrap
 ```
 
@@ -57,6 +55,5 @@ npm run electron
 - **Nested tree** — unlimited depth, lazy-expandable, indentation padding per level.
 - **Cloning** — `note_relations` is a many-to-many bridge, so one `notes` row can have many
   parents (each `relationId` is its own place in the tree).
-- **Attributes** — key/value pairs of `type` `label` or `relation`, exactly like Trilium.
 - **Note types** — `text`, `code`, `todo`, `search`, each with its own Boxicon.
 - **Boxicons** — loaded via CDN, mapped per note type in `tree.js → NOTE_TYPE_ICON`.

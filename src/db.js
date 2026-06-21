@@ -4,7 +4,7 @@
  * Responsibilities:
  *   - open / migrate the database
  *   - generate ids (ULID-ish)
- *   - CRUD for notes, note_relations (the tree), attributes
+ *   - CRUD for notes, note_relations (the tree)
  *   - recursive hierarchy fetch (children of a parent, ordered, with clone counts)
  *   - small CLI:  `node src/db.js --init | --seed | --status`
  *
@@ -131,18 +131,6 @@ const stmts = {
     relMaxSort: db.prepare(`
         SELECT COALESCE(MAX(sortOrder), 0) + 1 FROM note_relations
         WHERE parentId = ? AND isDeleted = 0`),
-
-    // attributes
-    attrList: db.prepare(`
-        SELECT * FROM attributes WHERE noteId = ? AND isDeleted = 0
-        ORDER BY position, attributeId`),
-    attrInsert: db.prepare(`
-        INSERT INTO attributes (attributeId, noteId, type, name, value, position, isInheritable)
-        VALUES (@attributeId, @noteId, @type, @name, @value, @position, @isInheritable)`),
-    attrUpdate: db.prepare(`
-        UPDATE attributes SET name = @name, value = @value, type = @type
-        WHERE attributeId = @attributeId`),
-    attrDelete: db.prepare('UPDATE attributes SET isDeleted = 1 WHERE attributeId = ?'),
 };
 
 // ---------------------------------------------------------------------------
@@ -304,24 +292,6 @@ const Tree = {
     },
 };
 
-const Attributes = {
-    list(noteId) { return stmts.attrList.all(noteId); },
-
-    add({ noteId, type = 'label', name, value = '', position = 0, isInheritable = 0 }) {
-        const attributeId = newId();
-        stmts.attrInsert.run({
-            attributeId, noteId, type, name, value, position, isInheritable,
-        });
-        return stmts.attrList.get(noteId); // re-read
-    },
-
-    update(attributeId, { type, name, value }) {
-        stmts.attrUpdate.run({ attributeId, type, name, value });
-    },
-
-    remove(attributeId) { stmts.attrDelete.run(attributeId); },
-};
-
 // ---------------------------------------------------------------------------
 //  Seed data (called from CLI `npm run seed`)
 // ---------------------------------------------------------------------------
@@ -342,15 +312,9 @@ function seed() {
     const tips = mk('Tips & Tricks', 'text', docs);
     const todo = mk('Project Roadmap', 'todo', kb,
         '<ul><li><input type="checkbox" checked> SQLite schema</li>' +
-        '<li><input type="checkbox"> Tree drag-and-drop</li>' +
-        '<li><input type="checkbox"> Attributes panel</li></ul>');
+        '<li><input type="checkbox"> Tree drag-and-drop</li></ul>');
     const code1 = mk('Snippets', 'code', ROOT_ID,
         '// example snippet\nconst notes = require("./db");\nnotes.Notes.list();');
-
-    // Some attributes (Trilium-style labels)
-    Attributes.add({ noteId: kb,   name: 'cssClass',  value: 'kb-root' });
-    Attributes.add({ noteId: kb,   name: 'iconClass', value: 'bx bx-cube' });
-    Attributes.add({ noteId: inst, name: 'lang',      value: 'bash' });
 
     // Demonstrate CLONING: same "Snippets" note also under Documentation.
     Tree.clone(code1, docs);
@@ -369,8 +333,7 @@ if (require.main === module) {
         const counts = db.prepare(`
             SELECT
               (SELECT COUNT(*) FROM notes WHERE isDeleted=0)         AS notes,
-              (SELECT COUNT(*) FROM note_relations WHERE isDeleted=0) AS relations,
-              (SELECT COUNT(*) FROM attributes WHERE isDeleted=0)    AS attributes
+              (SELECT COUNT(*) FROM note_relations WHERE isDeleted=0) AS relations
         `).get();
         console.log('[status]', counts);
     } else if (arg === '--init') {
@@ -381,4 +344,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { db, Notes, Tree, Attributes, newId, ROOT_ID };
+module.exports = { db, Notes, Tree, newId, ROOT_ID };

@@ -1,20 +1,18 @@
 /**
- * app.js — bootstrap + glue between TreeView, Editor, AttributesPanel.
+ * app.js — bootstrap + glue between TreeView and Editor.
  * Also wires up: sidebar resize, global search, top-bar buttons, modal close.
  */
 
 (function bootstrap() {
-    // ---- TreeView → Editor + Attributes wiring ---------------------------
+    // ---- TreeView → Editor wiring ----------------------------------------
     TreeView.onNoteSelected(async (node) => {
         await Editor.load(node.noteId);
-        AttributesPanel.setNote(node.noteId);
     });
 
     // support opening from search-result clicks inside the editor
     document.addEventListener('notes:open', async (e) => {
         const node = e.detail;
         await Editor.load(node.noteId);
-        AttributesPanel.setNote(node.noteId);
     });
 
     // ---- top-bar buttons --------------------------------------------------
@@ -147,7 +145,6 @@ function renderSearchResults(el, results, q) {
         li.addEventListener('click', async () => {
             const noteId = li.dataset.noteid;
             await Editor.load(noteId);
-            AttributesPanel.setNote(noteId);
             el.hidden = true;
             document.getElementById('globalSearch').value = '';
         });
