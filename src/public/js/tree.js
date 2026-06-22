@@ -19,8 +19,6 @@ const TreeView = (() => {
     const NOTE_TYPE_ICON = {
         text:   'bx bx-file',
         code:   'bx bx-code-alt',
-        todo:   'bx bx-check-square',
-        search: 'bx bx-search',
     };
     const FOLDER_OPEN   = 'bx bx-folder-open';
     const FOLDER_CLOSED = 'bx bx-folder';

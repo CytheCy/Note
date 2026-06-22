@@ -1,9 +1,8 @@
 /**
  * editor.js — the note editor pane.
  *
- * - text/todo → contentEditable WYSIWYG with a tiny format toolbar
- * - code      → <textarea> with mono font
- * - search    → renders results inline (query = first line of content)
+ * - text → contentEditable WYSIWYG with a tiny format toolbar
+ * - code → <textarea> with mono font
  *
  * Autosave is debounced; the title and type inputs also save on change.
  */
@@ -25,8 +24,6 @@ const Editor = (() => {
     const ICONS = {
         text:   'bx bx-file',
         code:   'bx bx-code-alt',
-        todo:   'bx bx-check-square',
-        search: 'bx bx-search',
     };
 
     // ---- load a note into the panes ---------------------------------------
@@ -49,15 +46,8 @@ const Editor = (() => {
             elRich.hidden = true; elToolbar.hidden = true;
             elCode.hidden = false;
             elCode.value = note.content || '';
-        } else if (note.type === 'search') {
-            // Render search results inline as HTML
-            elRich.hidden = false; elToolbar.hidden = true;
-            elCode.hidden = true;
-            const query = (note.content || '').split('\n')[0];
-            const results = query ? await Api.search(query) : [];
-            elRich.innerHTML = renderSearchResults(query, results);
         } else {
-            // text / todo → WYSIWYG
+            // text → WYSIWYG
             elRich.hidden = false; elToolbar.hidden = false;
             elCode.hidden = true;
             elRich.innerHTML = note.content || '';
@@ -151,35 +141,6 @@ const Editor = (() => {
             return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
         } catch { return iso; }
     }
-
-    function renderSearchResults(query, results) {
-        let html = `<p style="color:var(--text-muted)"><i class="bx bx-search"></i> Saved search: "<b>${escapeHtml(query)}</b>" — ${results.length} match(es)</p>`;
-        html += '<ul style="list-style:none;padding:0">';
-        for (const r of results) {
-            html += `<li data-noteid="${r.noteId}" style="padding:8px;border:1px solid var(--border);border-radius:6px;margin:6px 0;cursor:pointer">
-                <i class="bx bx-file"></i> <b>${escapeHtml(r.title)}</b>
-                <span style="color:var(--text-muted);font-size:12px"> · ${r.type}</span>
-            </li>`;
-        }
-        html += '</ul>';
-        return html;
-    }
-
-    function escapeHtml(s) {
-        return (s || '').replace(/[&<>"']/g, c => ({
-            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-        })[c]);
-    }
-
-    // delegated click for search-result items
-    elRich.addEventListener('click', (e) => {
-        const li = e.target.closest('li[data-noteid]');
-        if (li && TreeView.onNoteSelected) {
-            // re-use app's load path by simulating selection
-            const fake = { noteId: li.dataset.noteid, relationId: null, title: '', type: 'text', children: [] };
-            document.dispatchEvent(new CustomEvent('notes:open', { detail: fake }));
-        }
-    });
 
     return { load, clear, saveNow };
 })();

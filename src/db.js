@@ -191,7 +191,7 @@ const Notes = {
         return true;
     },
 
-    /** Search by title/content — used by the "search" note type. */
+    /** Search by title/content — backs the global search box. */
     search(query) {
         if (!query?.trim()) return [];
         return stmts.noteSearch.all({ q: `%${query}%` });
@@ -310,9 +310,6 @@ function seed() {
     const inst = mk('Installation', 'code', docs,
         '# Installation\n\n```bash\nnpm install\nnpm run init-db\nnpm start\n```');
     const tips = mk('Tips & Tricks', 'text', docs);
-    const todo = mk('Project Roadmap', 'todo', kb,
-        '<ul><li><input type="checkbox" checked> SQLite schema</li>' +
-        '<li><input type="checkbox"> Tree drag-and-drop</li></ul>');
     const code1 = mk('Snippets', 'code', ROOT_ID,
         '// example snippet\nconst notes = require("./db");\nnotes.Notes.list();');
 

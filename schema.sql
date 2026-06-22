@@ -17,15 +17,15 @@ CREATE TABLE IF NOT EXISTS notes (
     noteId        TEXT    PRIMARY KEY,                -- ULID-ish client id
     title         TEXT    NOT NULL DEFAULT 'Untitled',
     content       TEXT    NOT NULL DEFAULT '',
-    type          TEXT    NOT NULL DEFAULT 'text'     -- text | code | todo | search
-                    CHECK (type IN ('text','code','todo','search')),
+    type          TEXT    NOT NULL DEFAULT 'text'     -- text | code
+                    CHECK (type IN ('text','code')),
     dateCreated   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     dateModified  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     isProtected   INTEGER NOT NULL DEFAULT 0,         -- placeholder for future E2EE
     isDeleted     INTEGER NOT NULL DEFAULT 0          -- soft delete (Trilium-style)
 );
 
--- Full-text-ish convenience index for the search note type.
+-- Indexes that back the global search box (title/content LIKE).
 CREATE INDEX IF NOT EXISTS idx_notes_title        ON notes (title);
 CREATE INDEX IF NOT EXISTS idx_notes_type         ON notes (type);
 CREATE INDEX IF NOT EXISTS idx_notes_isDeleted    ON notes (isDeleted);

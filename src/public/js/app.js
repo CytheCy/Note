@@ -9,12 +9,6 @@
         await Editor.load(node.noteId);
     });
 
-    // support opening from search-result clicks inside the editor
-    document.addEventListener('notes:open', async (e) => {
-        const node = e.detail;
-        await Editor.load(node.noteId);
-    });
-
     // ---- top-bar buttons --------------------------------------------------
     document.getElementById('newRootNoteBtn').addEventListener('click', async () => {
         await TreeView.createChild('root', 'text', 'New Note');
@@ -152,7 +146,7 @@ function renderSearchResults(el, results, q) {
 }
 
 function typeIconChar(type) {
-    return ({ text: 'file', code: 'code-alt', todo: 'check-square', search: 'search' })[type] || 'file';
+    return ({ text: 'file', code: 'code-alt' })[type] || 'file';
 }
 
 function escapeHtml(s) {
