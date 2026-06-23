@@ -55,5 +55,5 @@ npm run electron
 - **Nested tree** — unlimited depth, lazy-expandable, indentation padding per level.
 - **Cloning** — `note_relations` is a many-to-many bridge, so one `notes` row can have many
   parents (each `relationId` is its own place in the tree).
-- **Note types** — `text`, `code`, each with its own Boxicon.
+- **Note types** — `text`, each with its own Boxicon.
 - **Boxicons** — loaded via CDN, mapped per note type in `tree.js → NOTE_TYPE_ICON`.

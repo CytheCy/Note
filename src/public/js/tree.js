@@ -18,7 +18,6 @@ const TreeView = (() => {
     // Default icon + per-type override + folder icon for parents.
     const NOTE_TYPE_ICON = {
         text:   'bx bx-file',
-        code:   'bx bx-code-alt',
     };
     const FOLDER_OPEN   = 'bx bx-folder-open';
     const FOLDER_CLOSED = 'bx bx-folder';

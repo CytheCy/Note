@@ -74,19 +74,17 @@
                 <input id="noteTitle" type="text" placeholder="Note title" disabled />
                 <select id="noteTypeSelect" title="Note type" disabled>
                     <option value="text">Text</option>
-                    <option value="code">Code</option>
                 </select>
                 <span id="noteMeta" class="note-meta"></span>
             </div>
 
-            <!-- Editor body — switches between contenteditable / textarea -->
+            <!-- Editor body — contenteditable WYSIWYG -->
             <div id="editorBody" class="editor-body">
                 <div id="emptyState" class="empty-state">
                     <i class="bx bx-note"></i>
                     <p>Select or create a note to begin.</p>
                 </div>
                 <div id="richTextEditor" class="rich-text-editor" contenteditable="true" hidden></div>
-                <textarea id="codeEditor" class="code-editor" hidden spellcheck="false"></textarea>
             </div>
 
             <!-- Formatting toolbar for the WYSIWYG editor -->

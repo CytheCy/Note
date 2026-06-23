@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS notes (
     noteId        TEXT    PRIMARY KEY,                -- ULID-ish client id
     title         TEXT    NOT NULL DEFAULT 'Untitled',
     content       TEXT    NOT NULL DEFAULT '',
-    type          TEXT    NOT NULL DEFAULT 'text'     -- text | code
-                    CHECK (type IN ('text','code')),
+    type          TEXT    NOT NULL DEFAULT 'text'     -- text
+                    CHECK (type IN ('text')),
     dateCreated   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     dateModified  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     isProtected   INTEGER NOT NULL DEFAULT 0,         -- placeholder for future E2EE

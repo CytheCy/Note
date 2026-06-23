@@ -146,7 +146,7 @@ function renderSearchResults(el, results, q) {
 }
 
 function typeIconChar(type) {
-    return ({ text: 'file', code: 'code-alt' })[type] || 'file';
+    return ({ text: 'file' })[type] || 'file';
 }
 
 function escapeHtml(s) {

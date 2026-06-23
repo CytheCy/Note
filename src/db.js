@@ -307,10 +307,10 @@ function seed() {
     };
     const kb   = mk('Knowledge Base', 'text', ROOT_ID);
     const docs = mk('Documentation', 'text', kb);
-    const inst = mk('Installation', 'code', docs,
+    const inst = mk('Installation', 'text', docs,
         '# Installation\n\n```bash\nnpm install\nnpm run init-db\nnpm start\n```');
     const tips = mk('Tips & Tricks', 'text', docs);
-    const code1 = mk('Snippets', 'code', ROOT_ID,
+    const code1 = mk('Snippets', 'text', ROOT_ID,
         '// example snippet\nconst notes = require("./db");\nnotes.Notes.list();');
 
     // Demonstrate CLONING: same "Snippets" note also under Documentation.

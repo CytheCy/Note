@@ -2,7 +2,6 @@
  * editor.js — the note editor pane.
  *
  * - text → contentEditable WYSIWYG with a tiny format toolbar
- * - code → <textarea> with mono font
  *
  * Autosave is debounced; the title and type inputs also save on change.
  */
@@ -14,7 +13,6 @@ const Editor = (() => {
     const elMeta    = document.getElementById('noteMeta');
     const elEmpty   = document.getElementById('emptyState');
     const elRich    = document.getElementById('richTextEditor');
-    const elCode    = document.getElementById('codeEditor');
     const elToolbar = document.getElementById('formatToolbar');
 
     let currentNote = null;
@@ -23,7 +21,6 @@ const Editor = (() => {
 
     const ICONS = {
         text:   'bx bx-file',
-        code:   'bx bx-code-alt',
     };
 
     // ---- load a note into the panes ---------------------------------------
@@ -42,23 +39,16 @@ const Editor = (() => {
         elTypeIcon.className = ICONS[note.type] || 'bx bx-file';
         elMeta.textContent = fmtDate(note.dateModified) + (note.type ? ` · ${note.type}` : '');
 
-        if (note.type === 'code') {
-            elRich.hidden = true; elToolbar.hidden = true;
-            elCode.hidden = false;
-            elCode.value = note.content || '';
-        } else {
-            // text → WYSIWYG
-            elRich.hidden = false; elToolbar.hidden = false;
-            elCode.hidden = true;
-            elRich.innerHTML = note.content || '';
-        }
+        // text → WYSIWYG
+        elRich.hidden = false; elToolbar.hidden = false;
+        elRich.innerHTML = note.content || '';
         suppressLoad = false;
     }
 
     function clear() {
         currentNote = null;
         elEmpty.hidden = false;
-        elRich.hidden = true; elCode.hidden = true; elToolbar.hidden = true;
+        elRich.hidden = true; elToolbar.hidden = true;
         elTitle.disabled = true; elTypeSel.disabled = true;
         elTitle.value = ''; elMeta.textContent = '';
     }
@@ -72,7 +62,7 @@ const Editor = (() => {
 
     async function saveNow() {
         if (!currentNote) return;
-        const content = currentNote.type === 'code' ? elCode.value : elRich.innerHTML;
+        const content = elRich.innerHTML;
         const title   = elTitle.value;
         const type    = elTypeSel.value;
         if (content === currentNote.content &&
@@ -101,7 +91,6 @@ const Editor = (() => {
 
     // ---- events ------------------------------------------------------------
     elTitle.addEventListener('input', scheduleSave);
-    elCode.addEventListener('input',  scheduleSave);
     elRich.addEventListener('input',  scheduleSave);
     elTypeSel.addEventListener('change', async () => {
         await saveNow();           // commit type change immediately

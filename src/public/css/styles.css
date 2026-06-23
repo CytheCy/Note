@@ -24,8 +24,6 @@
     --danger:        #d33;
     --surface:       #ffffff;
     --surface-alt:   #fbfbfa;
-    --code-bg:       #1e1e2e;
-    --code-text:     #e4e4ef;
     --row-h:         28px;
     --indent:        16px;
     --topbar-h:      44px;
@@ -48,8 +46,6 @@
     --danger:        #ff6b6b;
     --surface:       #2a2a31;
     --surface-alt:   #242429;
-    --code-bg:       #15151c;
-    --code-text:     #e4e4ef;
     color-scheme: dark;
 }
 
@@ -68,8 +64,6 @@
         --danger:        #ff6b6b;
         --surface:       #2a2a31;
         --surface-alt:   #242429;
-        --code-bg:       #15151c;
-        --code-text:     #e4e4ef;
         color-scheme: dark;
     }
 }
@@ -254,13 +248,6 @@ button { font-family: inherit; cursor: pointer; }
     font-family: var(--mono); background: var(--surface-alt); border-radius: 3px;
 }
 .rich-text-editor pre { padding: 10px; overflow: auto; }
-
-.code-editor {
-    flex: 1; border: 0; resize: none; padding: 16px 20px;
-    font-family: var(--mono); font-size: 13.5px; line-height: 1.5;
-    background: var(--code-bg); color: var(--code-text);
-}
-.code-editor:focus { outline: none; }
 
 /* format toolbar */
 .format-toolbar {
