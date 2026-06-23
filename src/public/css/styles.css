@@ -221,9 +221,6 @@ button { font-family: inherit; cursor: pointer; }
     font-size: 17px; font-weight: 600; padding: 4px 6px; border-radius: 4px;
 }
 #noteTitle:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-#noteTypeSelect {
-    border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; font-size: 12px; background: var(--surface); color: var(--text);
-}
 .note-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 
 /* editor body */
