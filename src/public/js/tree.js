@@ -380,8 +380,6 @@ const TreeView = (() => {
         const rows = [
             ['noteId',       full.noteId],
             ['type',         full.type],
-            ['dateCreated',  full.dateCreated],
-            ['dateModified', full.dateModified],
             ['parents',      (full.parents || []).map(p => p.title).join(', ') || '(root)'],
         ];
         body.innerHTML = rows.map(([k, v]) =>

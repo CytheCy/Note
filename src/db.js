@@ -96,9 +96,6 @@ const stmts = {
     noteUpdate: db.prepare(`
         UPDATE notes SET title = @title, content = @content, type = @type
         WHERE noteId = @noteId`),
-    noteTouch: db.prepare(`
-        UPDATE notes SET dateModified = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-        WHERE noteId = @noteId`),
     noteSoftDelete: db.prepare(`
         UPDATE notes SET isDeleted = 1 WHERE noteId = @noteId`),
     noteSearch: db.prepare(`

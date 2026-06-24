@@ -8,7 +8,6 @@
 
 const Editor = (() => {
     const elTitle   = document.getElementById('noteTitle');
-    const elMeta    = document.getElementById('noteMeta');
     const elEmpty   = document.getElementById('emptyState');
     const elRich    = document.getElementById('richTextEditor');
     const elToolbar = document.getElementById('formatToolbar');
@@ -28,7 +27,6 @@ const Editor = (() => {
         elTitle.disabled = false;
 
         elTitle.value = note.title;
-        elMeta.textContent = fmtDate(note.dateModified);
 
         // text → WYSIWYG
         elRich.hidden = false; elToolbar.hidden = false;
@@ -41,7 +39,7 @@ const Editor = (() => {
         elEmpty.hidden = false;
         elRich.hidden = true; elToolbar.hidden = true;
         elTitle.disabled = true;
-        elTitle.value = ''; elMeta.textContent = '';
+        elTitle.value = '';
     }
 
     // ---- autosave ----------------------------------------------------------
@@ -61,7 +59,6 @@ const Editor = (() => {
         try {
             const updated = await Api.updateNote(currentNote.noteId, { title, content });
             currentNote = updated;
-            elMeta.textContent = fmtDate(updated.dateModified);
             // refresh tree label without full reload
             const row = document.querySelector(`.tree-row[data-noteId="${updated.noteId}"] .tree-label`);
             if (row) row.textContent = updated.title;
@@ -99,15 +96,6 @@ const Editor = (() => {
             e.preventDefault(); saveNow();
         }
     });
-
-    // ---- helpers -----------------------------------------------------------
-    function fmtDate(iso) {
-        if (!iso) return '';
-        try {
-            const d = new Date(iso);
-            return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-        } catch { return iso; }
-    }
 
     return { load, clear, saveNow };
 })();
