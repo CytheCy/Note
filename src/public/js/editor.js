@@ -97,5 +97,15 @@ const Editor = (() => {
         }
     });
 
-    return { load, clear, saveNow };
+    // ---- external title sync ---------------------------------------------
+    // Called when a note is renamed elsewhere (e.g. the tree). If that note
+    // is the one currently open, update the title box without reloading.
+    function setTitleIfCurrent(noteId, title) {
+        if (currentNote && currentNote.noteId === noteId) {
+            currentNote.title = title;
+            elTitle.value = title;
+        }
+    }
+
+    return { load, clear, saveNow, setTitleIfCurrent };
 })();

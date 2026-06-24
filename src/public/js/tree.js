@@ -198,6 +198,10 @@ const TreeView = (() => {
             span.className = 'tree-label';
             span.textContent = val;
             input.replaceWith(span);
+            // keep the editor's title box in sync if this note is open
+            if (typeof Editor !== 'undefined' && Editor.setTitleIfCurrent) {
+                Editor.setTitleIfCurrent(node.noteId, val);
+            }
         };
         input.addEventListener('blur', commit);
         input.addEventListener('keydown', (e) => {
