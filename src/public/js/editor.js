@@ -60,7 +60,7 @@ const Editor = (() => {
             const updated = await Api.updateNote(currentNote.noteId, { title, content });
             currentNote = updated;
             // refresh tree label without full reload
-            const row = document.querySelector(`.tree-row[data-noteId="${updated.noteId}"] .tree-label`);
+            const row = document.querySelector(`.tree-row[data-note-id="${updated.noteId}"] .tree-label`);
             if (row) row.textContent = updated.title;
         } catch (e) {
             console.error('save failed', e);

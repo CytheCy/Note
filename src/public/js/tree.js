@@ -405,7 +405,7 @@ const TreeView = (() => {
         async createChild(parentId, type = 'text', title = 'New Note') {
             const note = await Api.createNote({ parentId, type, title });
             // make sure parent is expanded so the new child is visible
-            const parentRow = document.querySelector(`.tree-row[data-noteId="${parentId}"]`);
+            const parentRow = document.querySelector(`.tree-row[data-note-id="${parentId}"]`);
             if (parentRow) {
                 const nodeEl = parentRow.parentElement;
                 const relId = parentRow.dataset.relationId;
@@ -413,7 +413,7 @@ const TreeView = (() => {
             }
             await TreeView.reload();
             // select the new note
-            const newRow = document.querySelector(`.tree-row[data-noteId="${note.noteId}"]`);
+            const newRow = document.querySelector(`.tree-row[data-note-id="${note.noteId}"]`);
             if (newRow) newRow.click();
             // begin inline rename
             if (newRow) {
