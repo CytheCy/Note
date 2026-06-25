@@ -13,6 +13,7 @@
 const TreeView = (() => {
     const elTree = document.getElementById('tree');
     const elCtx  = document.getElementById('ctxMenu');
+    const elIconPicker = document.getElementById('iconPicker');
 
     // ---- Trilium-style icon mapping ----------------------------------------
     // Default icon + per-type override + folder icon for parents.
@@ -21,6 +22,19 @@ const TreeView = (() => {
     };
     const FOLDER_OPEN   = 'bx bx-folder-open';
     const FOLDER_CLOSED = 'bx bx-folder';
+    const BOXICONS_CSS = 'https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css';
+    const FALLBACK_ICON_CHOICES = [
+        '', 'bx bx-file', 'bx bx-note', 'bx bx-folder', 'bx bx-book', 'bx bx-bookmark',
+        'bx bx-star', 'bx bxs-star', 'bx bx-heart', 'bx bxs-heart', 'bx bx-pin',
+        'bx bx-check-circle', 'bx bx-error-circle', 'bx bx-info-circle', 'bx bx-help-circle',
+        'bx bx-bulb', 'bx bx-brain', 'bx bx-code-alt', 'bx bx-terminal', 'bx bx-data',
+        'bx bx-calendar', 'bx bx-time', 'bx bx-task', 'bx bx-list-check', 'bx bx-edit',
+        'bx bx-pencil', 'bx bx-link', 'bx bx-image', 'bx bx-music', 'bx bx-video',
+        'bx bx-map', 'bx bx-home', 'bx bx-briefcase', 'bx bx-rocket', 'bx bx-flag',
+        'bx bx-lock-alt', 'bx bx-key', 'bx bx-cog', 'bx bx-package', 'bx bx-archive',
+        'bx bxl-github', 'bx bxl-javascript', 'bx bxl-html5', 'bx bxl-css3',
+    ];
+    let iconChoicesPromise = null;
 
     // ---- state -------------------------------------------------------------
     let selectedRelationId = null;   // currently selected row
@@ -35,10 +49,19 @@ const TreeView = (() => {
     }
 
     function iconFor(node) {
+        if (node.icon) return node.icon;
         if (isFolder(node)) {
             return node.isExpanded ? FOLDER_OPEN : FOLDER_CLOSED;
         }
         return NOTE_TYPE_ICON[node.type] || 'bx bx-file';
+    }
+
+    function normalizeIcon(value) {
+        const icon = (value || '').trim();
+        if (!icon) return null;
+        if (/^(bx|bxs|bxl)-[a-z0-9-]+$/.test(icon)) return `bx ${icon}`;
+        if (/^bx (bx|bxs|bxl)-[a-z0-9-]+$/.test(icon)) return icon;
+        return false;
     }
 
     function isClone(node) {
@@ -76,6 +99,13 @@ const TreeView = (() => {
         // icon
         const icon = document.createElement('i');
         icon.className = 'tree-icon ' + iconFor(node);
+        icon.title = 'Right-click to change icon';
+        icon.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectRow(row, node);
+            openIconPicker(e.clientX, e.clientY, node);
+        });
 
         // label
         const label = document.createElement('span');
@@ -312,6 +342,7 @@ const TreeView = (() => {
     elCtx.addEventListener('click', async (e) => {
         const btn = e.target.closest('button[data-action]');
         if (!btn) return;
+        e.stopPropagation();
         const action = btn.dataset.action;
         const { node, rowEl } = ctxTarget || {};
         closeContextMenu();
@@ -325,6 +356,9 @@ const TreeView = (() => {
                 case 'create-folder':
                     // a "folder" is just a text note that will get children
                     await TreeView.createChild(node.noteId, 'text', 'New Folder');
+                    break;
+                case 'change-icon':
+                    openIconPicker(rowEl.getBoundingClientRect().left + 28, rowEl.getBoundingClientRect().top, node);
                     break;
                 case 'rename':
                     triggerRename(rowEl, node);
@@ -370,9 +404,102 @@ const TreeView = (() => {
         return d;
     }
 
+    function openIconPicker(x, y, node) {
+        closeContextMenu();
+        elIconPicker.innerHTML = '<div class="icon-picker-loading">Loading icons...</div>';
+        elIconPicker.style.left = Math.min(x, window.innerWidth - 360) + 'px';
+        elIconPicker.style.top = Math.min(y, window.innerHeight - 420) + 'px';
+        elIconPicker.hidden = false;
+        elIconPicker._node = node;
+        loadIconChoices().then(icons => {
+            if (elIconPicker._node === node && !elIconPicker.hidden) renderIconPicker(icons, node);
+        });
+    }
+
+    function renderIconPicker(icons, node, filter = '') {
+        const q = filter.trim().toLowerCase();
+        const visible = q
+            ? icons.filter(icon => icon.toLowerCase().includes(q))
+            : icons;
+        elIconPicker.innerHTML = `
+            <input class="icon-picker-search" type="search" placeholder="Search icons" value="${escapeAttr(filter)}" />
+            <div class="icon-picker-grid">
+                ${visible.map(icon => `
+            <button data-icon="${icon}" class="${(node.icon || '') === icon ? 'selected' : ''}"
+                    title="${icon || 'Default icon'}">
+                <i class="${icon || 'bx bx-reset'}"></i>
+            </button>`).join('')}
+            </div>`;
+        const search = elIconPicker.querySelector('.icon-picker-search');
+        search.focus();
+        search.setSelectionRange(search.value.length, search.value.length);
+    }
+
+    function loadIconChoices() {
+        if (!iconChoicesPromise) {
+            iconChoicesPromise = fetch(BOXICONS_CSS)
+                .then(res => res.ok ? res.text() : Promise.reject(new Error(res.statusText)))
+                .then(css => {
+                    const names = [...css.matchAll(/\.((?:bx|bxs|bxl)-[a-z0-9-]+):before/g)].map(m => m[1]);
+                    const unique = [...new Set(names)].sort((a, b) => iconRank(a) - iconRank(b) || a.localeCompare(b));
+                    return ['', ...unique.map(name => `bx ${name}`)];
+                })
+                .catch(() => FALLBACK_ICON_CHOICES);
+        }
+        return iconChoicesPromise;
+    }
+
+    function iconRank(name) {
+        if (name.startsWith('bx-')) return 0;
+        if (name.startsWith('bxs-')) return 1;
+        return 2;
+    }
+
+    function escapeAttr(s) {
+        return (s || '').replace(/[&<>"']/g, c => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        })[c]);
+    }
+
+    function closeIconPicker() {
+        elIconPicker.hidden = true;
+        elIconPicker._node = null;
+    }
+
+    async function setIcon(node, value) {
+        const icon = normalizeIcon(value);
+        if (icon === false) return alert('Use a Boxicons v2 class like bx-star, bxs-star, or bxl-github.');
+        const updated = await Api.updateNote(node.noteId, { icon });
+        node.icon = updated.icon;
+        if (typeof Editor !== 'undefined' && Editor.setIconIfCurrent) {
+            Editor.setIconIfCurrent(node.noteId, updated.icon);
+        }
+        await TreeView.reload();
+    }
+
+    elIconPicker.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const btn = e.target.closest('button[data-icon]');
+        if (!btn) return;
+        const node = elIconPicker._node;
+        closeIconPicker();
+        if (!node) return;
+        try { await setIcon(node, btn.dataset.icon); }
+        catch (err) { alert('Action failed: ' + err.message); }
+    });
+    elIconPicker.addEventListener('input', async (e) => {
+        if (!e.target.classList.contains('icon-picker-search')) return;
+        e.stopPropagation();
+        const node = elIconPicker._node;
+        const icons = await loadIconChoices();
+        renderIconPicker(icons, node, e.target.value);
+    });
+
     // close context menu on any outside click / Escape
-    document.addEventListener('click', closeContextMenu);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeContextMenu(); });
+    document.addEventListener('click', () => { closeContextMenu(); closeIconPicker(); });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { closeContextMenu(); closeIconPicker(); }
+    });
 
     // ============================ PROPERTIES ===============================
     async function showProperties(node) {
@@ -430,6 +557,7 @@ const TreeView = (() => {
         getSelected,
         triggerRename,
         showProperties,
+        openIconPicker,
         iconFor,
     };
 })();

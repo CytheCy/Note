@@ -8,6 +8,7 @@
 
 const Editor = (() => {
     const elTitle   = document.getElementById('noteTitle');
+    const elIcon    = document.getElementById('noteTypeIcon');
     const elEmpty   = document.getElementById('emptyState');
     const elRich    = document.getElementById('richTextEditor');
     const elToolbar = document.getElementById('formatToolbar');
@@ -27,6 +28,8 @@ const Editor = (() => {
         elTitle.disabled = false;
 
         elTitle.value = note.title;
+        elIcon.className = note.icon || 'bx bx-file';
+        elIcon.title = 'Right-click to change icon';
 
         // text → WYSIWYG
         elRich.hidden = false; elToolbar.hidden = false;
@@ -40,6 +43,7 @@ const Editor = (() => {
         elRich.hidden = true; elToolbar.hidden = true;
         elTitle.disabled = true;
         elTitle.value = '';
+        elIcon.className = 'bx bx-file';
     }
 
     // ---- autosave ----------------------------------------------------------
@@ -70,6 +74,12 @@ const Editor = (() => {
     // ---- events ------------------------------------------------------------
     elTitle.addEventListener('input', scheduleSave);
     elRich.addEventListener('input',  scheduleSave);
+    elIcon.addEventListener('contextmenu', (e) => {
+        if (!currentNote || typeof TreeView === 'undefined' || !TreeView.openIconPicker) return;
+        e.preventDefault();
+        e.stopPropagation();
+        TreeView.openIconPicker(e.clientX, e.clientY, currentNote);
+    });
 
     // Format toolbar → execCommand (legacy but works for contentEditable).
     elToolbar.addEventListener('mousedown', (e) => {
@@ -107,5 +117,12 @@ const Editor = (() => {
         }
     }
 
-    return { load, clear, saveNow, setTitleIfCurrent };
+    function setIconIfCurrent(noteId, icon) {
+        if (currentNote && currentNote.noteId === noteId) {
+            currentNote.icon = icon || null;
+            elIcon.className = icon || 'bx bx-file';
+        }
+    }
+
+    return { load, clear, saveNow, setTitleIfCurrent, setIconIfCurrent };
 })();

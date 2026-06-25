@@ -64,6 +64,15 @@ function newId(prefix = '') {
     return prefix + [...timeChars, ...randChars].join('');
 }
 
+function normalizeIcon(icon) {
+    if (icon == null || icon === '') return null;
+    if (typeof icon !== 'string') throw new Error('invalid icon');
+    const value = icon.trim();
+    if (/^bx (bx|bxs|bxl)-[a-z0-9-]+$/.test(value)) return value;
+    if (/^(bx|bxs|bxl)-[a-z0-9-]+$/.test(value)) return `bx ${value}`;
+    throw new Error('invalid icon');
+}
+
 // ---------------------------------------------------------------------------
 //  Open / migrate
 // ---------------------------------------------------------------------------
@@ -79,6 +88,19 @@ function openDb(dbPath = DB_PATH) {
 function applySchema(db) {
     const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
     db.exec(sql);
+    const noteCols = new Set(db.prepare('PRAGMA table_info(notes)').all().map(c => c.name));
+    if (!noteCols.has('icon')) db.exec('ALTER TABLE notes ADD COLUMN icon TEXT DEFAULT NULL');
+    db.exec(`
+        DROP TRIGGER IF EXISTS trg_notes_touch;
+        CREATE TRIGGER trg_notes_touch
+            AFTER UPDATE OF title, content, type, icon ON notes
+            FOR EACH ROW
+            WHEN NEW.dateModified = OLD.dateModified
+        BEGIN
+            UPDATE notes SET dateModified = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                WHERE noteId = NEW.noteId;
+        END;
+    `);
 }
 
 // One shared connection for the app (better-sqlite3 is sync → single conn is fine).
@@ -91,22 +113,22 @@ applySchema(db);
 const stmts = {
     noteGet: db.prepare('SELECT * FROM notes WHERE noteId = ?'),
     noteInsert: db.prepare(`
-        INSERT INTO notes (noteId, title, content, type)
-        VALUES (@noteId, @title, @content, @type)`),
+        INSERT INTO notes (noteId, title, content, type, icon)
+        VALUES (@noteId, @title, @content, @type, @icon)`),
     noteUpdate: db.prepare(`
-        UPDATE notes SET title = @title, content = @content, type = @type
+        UPDATE notes SET title = @title, content = @content, type = @type, icon = @icon
         WHERE noteId = @noteId`),
     noteSoftDelete: db.prepare(`
         UPDATE notes SET isDeleted = 1 WHERE noteId = @noteId`),
     noteSearch: db.prepare(`
-        SELECT noteId, title, type, dateModified FROM notes
+        SELECT noteId, title, type, icon, dateModified FROM notes
         WHERE isDeleted = 0 AND (title LIKE @q OR content LIKE @q)
         ORDER BY dateModified DESC LIMIT 100`),
 
     // tree
     relChildren: db.prepare(`
         SELECT r.relationId, r.noteId, r.sortOrder, r.isExpanded, r.prefix,
-               n.title, n.type, n.isDeleted,
+               n.title, n.type, n.icon, n.isDeleted,
                (SELECT COUNT(*) FROM note_relations c
                   WHERE c.parentId = r.noteId AND c.isDeleted = 0) AS childCount
         FROM note_relations r
@@ -140,11 +162,12 @@ const Notes = {
         return stmts.noteGet.get(noteId);
     },
 
-    create({ title = 'Untitled', content = '', type = 'text', parentId = ROOT_ID } = {}) {
+    create({ title = 'Untitled', content = '', type = 'text', icon = null, parentId = ROOT_ID } = {}) {
         const noteId = newId();
+        const iconClass = normalizeIcon(icon);
         const tx = db.transaction((opts) => {
             stmts.noteInsert.run({
-                noteId, title: opts.title, content: opts.content, type: opts.type,
+                noteId, title: opts.title, content: opts.content, type: opts.type, icon: iconClass,
             });
             // Attach to parent under last position.
             const sortOrder = stmts.relMaxSort.get(opts.parentId)['COALESCE(MAX(sortOrder), 0) + 1'];
@@ -161,7 +184,7 @@ const Notes = {
         return this.get(noteId);
     },
 
-    update(noteId, { title, content, type }) {
+    update(noteId, { title, content, type, icon }) {
         const current = this.get(noteId);
         if (!current) return null;
         stmts.noteUpdate.run({
@@ -169,6 +192,7 @@ const Notes = {
             title: title ?? current.title,
             content: content ?? current.content,
             type: type ?? current.type,
+            icon: icon === undefined ? current.icon : normalizeIcon(icon),
         });
         return this.get(noteId);
     },
@@ -216,6 +240,7 @@ const Tree = {
                     title: row.prefix ? `${row.prefix} - ${row.title}` : row.title,
                     rawTitle: row.title,
                     type: row.type,
+                    icon: row.icon,
                     prefix: row.prefix,
                     isExpanded: !!row.isExpanded,
                     childCount: row.childCount,

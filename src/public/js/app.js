@@ -122,7 +122,7 @@ function renderSearchResults(el, results, q) {
     } else {
         el.innerHTML = results.map(r => `
             <li data-noteid="${r.noteId}">
-                <i class="bx bx-${typeIconChar(r.type)}"></i>
+                <i class="${escapeHtml(r.icon || typeIconClass(r.type))}"></i>
                 <span>${escapeHtml(r.title)}</span>
                 <span style="margin-left:auto;color:var(--text-muted);font-size:11px">${r.type}</span>
             </li>`).join('');
@@ -140,8 +140,8 @@ function renderSearchResults(el, results, q) {
     });
 }
 
-function typeIconChar(type) {
-    return ({ text: 'file' })[type] || 'file';
+function typeIconClass(type) {
+    return ({ text: 'bx bx-file' })[type] || 'bx bx-file';
 }
 
 function escapeHtml(s) {

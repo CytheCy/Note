@@ -189,6 +189,7 @@ button { font-family: inherit; cursor: pointer; }
 .tree-caret:hover { color: var(--text); }
 
 .tree-icon { width: 18px; flex: 0 0 18px; text-align: center; font-size: 16px; color: var(--text-muted); }
+.tree-icon:hover { color: var(--text); }
 .tree-row.selected .tree-icon { color: var(--accent); }
 
 .tree-label {
@@ -213,7 +214,8 @@ button { font-family: inherit; cursor: pointer; }
     display: flex; align-items: center; gap: 8px;
     padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
-.editor-titlebar > #noteTypeIcon { font-size: 18px; color: var(--text-muted); }
+.editor-titlebar > #noteTypeIcon { font-size: 18px; color: var(--text-muted); cursor: pointer; }
+.editor-titlebar > #noteTypeIcon:hover { color: var(--text); }
 #noteTitle {
     flex: 1; border: 1px solid transparent; background: transparent;
     font-size: 17px; font-weight: 600; padding: 4px 6px; border-radius: 4px;
@@ -270,6 +272,33 @@ button { font-family: inherit; cursor: pointer; }
 .context-menu button.danger { color: var(--danger); }
 .context-menu button .bx { font-size: 15px; }
 .context-menu .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+.icon-picker {
+    position: fixed; z-index: 1001; width: 344px; max-width: calc(100vw - 16px);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.16); padding: 6px;
+}
+.icon-picker-search {
+    width: 100%; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface-alt); color: var(--text); padding: 6px 8px; margin-bottom: 6px;
+    font-size: 13px;
+}
+.icon-picker-search:focus { outline: none; border-color: var(--accent); }
+.icon-picker-grid {
+    display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px;
+    max-height: 320px; overflow: auto;
+}
+.icon-picker button {
+    width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+    border: 0; background: transparent; border-radius: 4px; color: var(--text-muted);
+}
+.icon-picker button:hover { background: var(--sidebar-hover); color: var(--text); }
+.icon-picker button.selected {
+    background: var(--sidebar-active); color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+.icon-picker .bx { font-size: 17px; }
+.icon-picker-loading { padding: 8px; color: var(--text-muted); font-size: 13px; }
 
 /* ============================== MODAL ==================================== */
 /* IMPORTANT: the `[hidden]` attribute must win over `display:flex`,

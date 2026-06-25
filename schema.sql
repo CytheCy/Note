@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS notes (
     content       TEXT    NOT NULL DEFAULT '',
     type          TEXT    NOT NULL DEFAULT 'text'     -- text
                     CHECK (type IN ('text')),
+    icon          TEXT    DEFAULT NULL,
     dateCreated   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     dateModified  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     isProtected   INTEGER NOT NULL DEFAULT 0,         -- placeholder for future E2EE
@@ -30,9 +31,9 @@ CREATE INDEX IF NOT EXISTS idx_notes_title        ON notes (title);
 CREATE INDEX IF NOT EXISTS idx_notes_type         ON notes (type);
 CREATE INDEX IF NOT EXISTS idx_notes_isDeleted    ON notes (isDeleted);
 
--- Keep dateModified fresh whenever content/title/type change.
+-- Keep dateModified fresh whenever content/title/type/icon change.
 CREATE TRIGGER IF NOT EXISTS trg_notes_touch
-    AFTER UPDATE OF title, content, type ON notes
+    AFTER UPDATE OF title, content, type, icon ON notes
     FOR EACH ROW
     WHEN NEW.dateModified = OLD.dateModified
 BEGIN

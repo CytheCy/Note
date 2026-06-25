@@ -88,14 +88,18 @@ function db_parents(noteId) {
 }
 
 app.post('/api/notes', (req, res) => {
-    const n = Notes.create(req.body || {});
-    res.status(201).json(n);
+    try {
+        const n = Notes.create(req.body || {});
+        res.status(201).json(n);
+    } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 app.put('/api/notes/:noteId', (req, res) => {
-    const n = Notes.update(req.params.noteId, req.body || {});
-    if (!n) return res.status(404).json({ error: 'not found' });
-    res.json(n);
+    try {
+        const n = Notes.update(req.params.noteId, req.body || {});
+        if (!n) return res.status(404).json({ error: 'not found' });
+        res.json(n);
+    } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 app.delete('/api/notes/relation/:relationId', (req, res) => {
