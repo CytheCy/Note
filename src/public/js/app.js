@@ -31,11 +31,6 @@
     // ---- Settings modal + theme switching --------------------------------
     initSettings();
 
-    const sidebar = document.getElementById('sidebar');
-    document.getElementById('toggleSidebarBtn').addEventListener('click', () => {
-        sidebar.classList.toggle('collapsed');
-    });
-
     // ---- modal close ------------------------------------------------------
     // Applies to every .modal-overlay (Properties + Settings).
     document.querySelectorAll('.modal-overlay').forEach(overlay => {

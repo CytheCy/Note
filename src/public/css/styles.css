@@ -150,8 +150,6 @@ button { font-family: inherit; cursor: pointer; }
 .pane-sidebar { width: 280px; min-width: 180px; background: var(--sidebar-bg); border-right: 1px solid var(--border); }
 .pane-editor { flex: 1; background: var(--bg); }
 
-.pane-sidebar.collapsed { width: 0 !important; min-width: 0; overflow: hidden; border-right: none; }
-
 .pane-header {
     padding: 8px 12px; font-size: 12px; text-transform: uppercase;
     letter-spacing: .05em; color: var(--text-muted);
@@ -355,5 +353,4 @@ button { font-family: inherit; cursor: pointer; }
 /* ============================== RESPONSIVE ============================== */
 @media (max-width: 700px) {
     .pane-sidebar { position: absolute; z-index: 20; height: calc(100vh - var(--topbar-h)); box-shadow: 2px 0 8px rgba(0,0,0,.15); }
-    .pane-sidebar.collapsed { transform: translateX(-100%); width: 280px !important; }
 }
