@@ -244,6 +244,46 @@ button { font-family: inherit; cursor: pointer; }
     font-family: var(--mono); background: var(--surface-alt); border-radius: 3px;
 }
 .rich-text-editor pre { padding: 10px; overflow: auto; }
+.rich-text-editor table {
+    border-collapse: collapse; width: 100%; margin: 10px 0;
+}
+.rich-text-editor th, .rich-text-editor td {
+    border: 1px solid var(--border); padding: 6px 8px; min-width: 80px;
+}
+.rich-text-editor th { background: var(--surface-alt); text-align: left; }
+.rich-text-editor hr { border: 0; border-top: 1px solid var(--border); margin: 18px 0; }
+.rich-text-editor .check-list { list-style: none; padding-left: 0; }
+.rich-text-editor .check-list li { display: flex; align-items: baseline; gap: 8px; }
+.rich-text-editor .titled-note {
+    border-left: 3px solid var(--accent); padding: 8px 0 8px 12px; margin: 10px 0;
+    background: var(--surface-alt);
+}
+.rich-text-editor .titled-note h2 { margin: 0 0 4px; font-size: 18px; }
+.rich-text-editor .titled-note p { margin: 0; }
+
+.slash-menu {
+    position: fixed; z-index: 1002; width: 220px; max-height: 320px; overflow: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.16); padding: 4px;
+}
+.slash-menu button {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    border: 0; background: transparent; color: var(--text); padding: 7px 10px;
+    border-radius: 4px; font-size: 13px; text-align: left;
+}
+.slash-menu button:hover, .slash-menu button.active { background: var(--sidebar-hover); }
+.slash-menu button .bx { font-size: 15px; color: var(--text-muted); }
+
+.code-copy-btn {
+    position: fixed; z-index: 1003; width: 28px; height: 28px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface); color: var(--text-muted);
+    box-shadow: 0 3px 12px rgba(0,0,0,.12);
+}
+.code-copy-btn:hover, .code-copy-btn.copied {
+    color: var(--text); background: var(--sidebar-hover);
+}
+.code-copy-btn .bx { font-size: 16px; }
 
 /* format toolbar */
 .format-toolbar {
