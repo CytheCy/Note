@@ -47,6 +47,10 @@
 
     // ---- global search ----------------------------------------------------
     initSearch();
+    document.getElementById('treeSearchBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSearch();
+    });
 
     // ---- initial load -----------------------------------------------------
     TreeView.reload();
@@ -114,6 +118,13 @@ function initSearch() {
         }
         if (e.key === 'Escape') { input.value = ''; resultsEl.hidden = true; }
     });
+}
+
+function openSearch() {
+    const input = document.getElementById('globalSearch');
+    input.focus();
+    input.select();
+    input.dispatchEvent(new Event('focus'));
 }
 
 function renderSearchResults(el, results, q) {

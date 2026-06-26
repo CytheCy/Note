@@ -23,6 +23,7 @@ const Editor = (() => {
     let hoveredCodeBlock = null;
     let codeExitArmed = false;
     let codeExitBreak = null;
+    const inlineFormatCommands = new Set(['bold', 'italic', 'underline']);
     const tableSlashBlocks = new Set(['table-row-below', 'table-col-right', 'table-row-delete', 'table-col-delete']);
     const slashBlocks = [
         ['text', 'bx bx-text', 'Regular text', '<p><br></p>'],
@@ -61,8 +62,9 @@ const Editor = (() => {
         elIcon.title = 'Right-click to change icon';
 
         // text → WYSIWYG
-        elRich.hidden = false; elToolbar.hidden = false;
+        elRich.hidden = false;
         elRich.innerHTML = note.content || '';
+        syncToolbarVisibility();
         hideSlashMenu();
         suppressLoad = false;
     }
@@ -104,7 +106,10 @@ const Editor = (() => {
 
     // ---- events ------------------------------------------------------------
     elTitle.addEventListener('input', scheduleSave);
-    elRich.addEventListener('input',  scheduleSave);
+    elRich.addEventListener('input', () => {
+        scheduleSave();
+        syncToolbarVisibility();
+    });
     elRich.addEventListener('mousemove', (e) => {
         const pre = e.target.closest('pre');
         if (!pre || !elRich.contains(pre)) return hideCodeCopy();
@@ -117,6 +122,7 @@ const Editor = (() => {
         disarmCodeExit();
     });
     elRich.addEventListener('keyup', (e) => {
+        syncToolbarVisibility();
         if (e.key !== '/' || !selectionInEditor()) return;
         openSlashMenu();
     });
@@ -165,6 +171,7 @@ const Editor = (() => {
         e.preventDefault();          // keep selection in the editor
         const cmd = btn.dataset.cmd;
         const val = btn.dataset.val;
+        const selectionOnly = inlineFormatCommands.has(cmd) && selectedTextInEditor();
         if (cmd === 'createLink') {
             const url = prompt('Link URL:');
             if (url) document.execCommand('createLink', false, url);
@@ -173,6 +180,7 @@ const Editor = (() => {
         } else {
             document.execCommand(cmd, false, null);
         }
+        if (selectionOnly) finishInlineFormatCommand(cmd);
         elRich.focus();
         scheduleSave();
     });
@@ -191,6 +199,7 @@ const Editor = (() => {
     document.addEventListener('mousedown', (e) => {
         if (!elSlash.hidden && !elSlash.contains(e.target)) hideSlashMenu();
     });
+    document.addEventListener('selectionchange', syncToolbarVisibility);
 
     elCodeCopy.addEventListener('mouseleave', (e) => {
         if (!hoveredCodeBlock || !hoveredCodeBlock.contains(e.relatedTarget)) hideCodeCopy();
@@ -230,6 +239,42 @@ const Editor = (() => {
     function selectionInEditor() {
         const sel = window.getSelection();
         return sel && sel.rangeCount && elRich.contains(sel.anchorNode);
+    }
+
+    function syncToolbarVisibility() {
+        elToolbar.hidden = !selectedTextInEditor();
+    }
+
+    function selectedTextInEditor() {
+        const sel = window.getSelection();
+        if (!currentNote || !sel || !sel.rangeCount || sel.isCollapsed) return false;
+        return elRich.contains(sel.anchorNode) && elRich.contains(sel.focusNode) && sel.toString().trim() !== '';
+    }
+
+    function finishInlineFormatCommand(cmd) {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        const formatted = currentInlineFormatElement(cmd);
+        if (formatted) placeCaretAfter(formatted);
+        if (document.queryCommandState(cmd)) document.execCommand(cmd, false, null);
+        syncToolbarVisibility();
+    }
+
+    function currentInlineFormatElement(cmd) {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return null;
+        const selectors = {
+            bold: 'b,strong,[style*="font-weight"]',
+            italic: 'i,em,[style*="font-style"]',
+            underline: 'u,[style*="text-decoration"]',
+        };
+        const node = sel.anchorNode;
+        const el = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest?.(selectors[cmd]);
+        return el && elRich.contains(el) ? el : null;
     }
 
     function openSlashMenu() {

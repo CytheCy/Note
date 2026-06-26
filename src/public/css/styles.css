@@ -164,6 +164,21 @@ button { font-family: inherit; cursor: pointer; }
 /* ============================== TREE ===================================== */
 .tree { flex: 1; overflow: auto; padding: 6px 4px; user-select: none; }
 .tree-empty { padding: 12px; color: var(--text-muted); font-size: 13px; }
+.tree-footer {
+    border-top: 1px solid var(--border);
+    padding: 6px 8px;
+    display: flex;
+    justify-content: flex-start;
+}
+.tree-footer-action {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    justify-content: center;
+    color: var(--text-muted);
+}
+.tree-footer-action:hover { color: var(--text); }
+.tree-footer-action .bx { font-size: 18px; }
 
 .tree-node { position: relative; }
 
