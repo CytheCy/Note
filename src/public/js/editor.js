@@ -21,6 +21,8 @@ const Editor = (() => {
     let slashRange = null;
     let slashIndex = 0;
     let hoveredCodeBlock = null;
+    let codeExitArmed = false;
+    let codeExitBreak = null;
     const tableSlashBlocks = new Set(['table-row-below', 'table-col-right', 'table-row-delete', 'table-col-delete']);
     const slashBlocks = [
         ['text', 'bx bx-text', 'Regular text', '<p><br></p>'],
@@ -32,7 +34,7 @@ const Editor = (() => {
         ['table-col-right', 'bx bx-plus', 'Insert table column right', insertTableColumnRight],
         ['table-row-delete', 'bx bx-trash', 'Delete table row', deleteTableRow],
         ['table-col-delete', 'bx bx-trash', 'Delete table column', deleteTableColumn],
-        ['code', 'bx bx-code-alt', 'Code block', '<pre><code><br></code></pre><p><br></p>'],
+        ['code', 'bx bx-code-alt', 'Code block', '<pre><code><span data-slash-caret></span><br></code></pre><p><br></p>'],
         ['heading', 'bx bx-heading', 'Heading', '<h2>Heading</h2><p><br></p>'],
         ['divider', 'bx bx-minus', 'Divider', '<hr><p><br></p>'],
         ['titled', 'bx bx-note', 'Titled Note', '<section class="titled-note"><h2>Title</h2><p>Note text</p></section><p><br></p>'],
@@ -111,11 +113,15 @@ const Editor = (() => {
     elRich.addEventListener('mouseleave', (e) => {
         if (!elCodeCopy.contains(e.relatedTarget)) hideCodeCopy();
     });
+    elRich.addEventListener('mousedown', () => {
+        disarmCodeExit();
+    });
     elRich.addEventListener('keyup', (e) => {
         if (e.key !== '/' || !selectionInEditor()) return;
         openSlashMenu();
     });
     elRich.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') disarmCodeExit();
         if (!elSlash.hidden) {
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -131,7 +137,10 @@ const Editor = (() => {
             }
             return;
         }
-        if (e.key === 'Enter' && handleChecklistEnter()) {
+        if (e.key === 'Enter' && handleCodeBlockEnter()) {
+            e.preventDefault();
+            scheduleSave();
+        } else if (e.key === 'Enter' && handleChecklistEnter()) {
             e.preventDefault();
             scheduleSave();
         }
@@ -266,6 +275,7 @@ const Editor = (() => {
             sel.removeAllRanges();
             sel.addRange(rangeWithSlashSelected());
             document.execCommand('insertHTML', false, content);
+            placeCaretAtSlashMarker();
         }
         hideSlashMenu();
         elRich.focus();
@@ -287,6 +297,14 @@ const Editor = (() => {
         sel.removeAllRanges();
         sel.addRange(rangeWithSlashSelected());
         document.execCommand('delete', false, null);
+    }
+
+    function placeCaretAtSlashMarker() {
+        const marker = elRich.querySelector('[data-slash-caret]');
+        if (!marker) return;
+        const target = marker.parentElement;
+        marker.remove();
+        placeCaretIn(target);
     }
 
     function currentTableCell() {
@@ -374,6 +392,78 @@ const Editor = (() => {
         return true;
     }
 
+    function handleCodeBlockEnter() {
+        const code = currentCodeBlock();
+        if (!code) return false;
+
+        const sel = window.getSelection();
+        const range = sel.getRangeAt(0);
+        if (range.collapsed && codeExitArmed && caretIsAfter(codeExitBreak, range)) {
+            exitCodeBlock(code, codeExitBreak);
+            disarmCodeExit();
+            return true;
+        }
+
+        codeExitBreak = insertCodeLineBreak(code, range);
+        codeExitArmed = true;
+        return true;
+    }
+
+    function insertCodeLineBreak(code, range) {
+        range.deleteContents();
+        const br = document.createElement('br');
+        range.insertNode(br);
+        if (!nextMeaningfulSibling(br)) br.after(document.createElement('br'));
+        placeCaretAfter(br);
+        return br;
+    }
+
+    function currentCodeBlock() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
+        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
+        const code = node?.closest?.('pre code');
+        return code && elRich.contains(code) ? code : null;
+    }
+
+    function caretIsAfter(node, range) {
+        if (!node?.isConnected || !range.collapsed) return false;
+        return range.startContainer === node.parentNode && range.startOffset === [...node.parentNode.childNodes].indexOf(node) + 1;
+    }
+
+    function nextMeaningfulSibling(node) {
+        let next = node.nextSibling;
+        while (next?.nodeType === Node.TEXT_NODE && next.data === '') next = next.nextSibling;
+        return next;
+    }
+
+    function exitCodeBlock(code, lineBreak) {
+        lineBreak.remove();
+        trimTrailingCodeBreaks(code);
+        if (!code.textContent) code.innerHTML = '<br>';
+
+        const pre = code.closest('pre');
+        const p = isEmptyParagraph(pre.nextElementSibling) ? pre.nextElementSibling : document.createElement('p');
+        if (!p.isConnected) {
+            p.innerHTML = '<br>';
+            pre.after(p);
+        }
+        placeCaretIn(p);
+    }
+
+    function isEmptyParagraph(node) {
+        return node?.tagName === 'P' && node.textContent.trim() === '';
+    }
+
+    function trimTrailingCodeBreaks(code) {
+        while (code.textContent && code.lastChild?.tagName === 'BR') code.lastChild.remove();
+    }
+
+    function disarmCodeExit() {
+        codeExitArmed = false;
+        codeExitBreak = null;
+    }
+
     function handleChecklistEnter() {
         const li = currentChecklistItem();
         if (!li) return false;
@@ -426,6 +516,16 @@ const Editor = (() => {
     function placeCaretIn(node) {
         const range = document.createRange();
         range.selectNodeContents(node);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        elRich.focus();
+    }
+
+    function placeCaretAfter(node) {
+        const range = document.createRange();
+        range.setStartAfter(node);
         range.collapse(true);
         const sel = window.getSelection();
         sel.removeAllRanges();

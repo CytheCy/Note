@@ -1,9 +1,10 @@
 <!doctype html>
 <meta charset="utf-8">
+<link rel="stylesheet" href="../src/public/css/styles.css">
 <input id="noteTitle">
 <i id="noteTypeIcon"></i>
 <div id="emptyState"></div>
-<div id="richTextEditor" contenteditable="true"></div>
+<div id="richTextEditor" class="rich-text-editor" contenteditable="true"></div>
 <div id="formatToolbar"></div>
 <div id="slashMenu" hidden></div>
 <script src="../src/public/js/editor.js"></script>
@@ -34,6 +35,26 @@
         button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     }
 
+    function selectionContainer() {
+        const sel = window.getSelection();
+        assert(sel.rangeCount, 'selection exists');
+        const node = sel.anchorNode;
+        return node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    }
+
+    function placeCaretInText(node, offset) {
+        const range = document.createRange();
+        range.setStart(node.firstChild, offset);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function pressEnter() {
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    }
+
     function assertTableCommandsHidden(hidden) {
         ['table-row-below', 'table-col-right', 'table-row-delete', 'table-col-delete'].forEach(id => {
             assert(slash.querySelector(`[data-block="${id}"]`).hidden === hidden, `${id} hidden=${hidden}`);
@@ -44,6 +65,29 @@
         editor.innerHTML = '<p>/</p>';
         putSlashIn(editor.querySelector('p'));
         assertTableCommandsHidden(true);
+        command('code');
+        const code = editor.querySelector('pre code');
+        assert(code, 'code block inserted');
+        assert(code.contains(selectionContainer()), 'caret placed inside code block');
+        code.textContent = 'one';
+        placeCaretInText(code, 3);
+        pressEnter();
+        assert(code.textContent === 'one', 'enter keeps code text intact');
+        assert(code.querySelectorAll('br').length === 2, 'enter inserts visible code line break with trailing caret line');
+        assert(getComputedStyle(code).display === 'block', 'code block owns its line box');
+        assert(code.contains(selectionContainer()), 'caret stays inside code block after first enter');
+        pressEnter();
+        assert(code.textContent === 'one', 'second enter removes blank code line');
+        assert(code.closest('pre').nextElementSibling?.tagName === 'P', 'second enter creates text line below code block');
+        assert(editor.querySelectorAll('p').length === 1, 'second enter reuses existing text line below code block');
+        assert(code.closest('pre').nextElementSibling.contains(selectionContainer()), 'caret exits to text line below code block');
+
+        editor.innerHTML = '<pre><code>one\n\nthree</code></pre><p><br></p>';
+        const existingBlankLineCode = editor.querySelector('pre code');
+        placeCaretInText(existingBlankLineCode, 4);
+        pressEnter();
+        assert(existingBlankLineCode.querySelector('br'), 'enter on existing blank code line creates a visible code line');
+        assert(existingBlankLineCode.contains(selectionContainer()), 'caret stays in code from existing blank line');
 
         editor.innerHTML = '<table><tbody><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></tbody></table>';
 

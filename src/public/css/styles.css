@@ -244,6 +244,7 @@ button { font-family: inherit; cursor: pointer; }
     font-family: var(--mono); background: var(--surface-alt); border-radius: 3px;
 }
 .rich-text-editor pre { padding: 10px; overflow: auto; }
+.rich-text-editor pre code { display: block; }
 .rich-text-editor table {
     border-collapse: collapse; width: 100%; margin: 10px 0;
 }
