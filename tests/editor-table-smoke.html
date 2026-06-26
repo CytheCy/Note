@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<input id="noteTitle">
+<i id="noteTypeIcon"></i>
+<div id="emptyState"></div>
+<div id="richTextEditor" contenteditable="true"></div>
+<div id="formatToolbar"></div>
+<div id="slashMenu" hidden></div>
+<script src="../src/public/js/editor.js"></script>
+<script>
+(() => {
+    const editor = document.getElementById('richTextEditor');
+    const slash = document.getElementById('slashMenu');
+
+    function assert(condition, message) {
+        if (!condition) throw new Error(message);
+    }
+
+    function putSlashIn(cell) {
+        cell.textContent = '/';
+        const range = document.createRange();
+        range.setStart(cell.firstChild, 1);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        editor.dispatchEvent(new KeyboardEvent('keyup', { key: '/', bubbles: true }));
+        assert(!slash.hidden, 'slash menu opened');
+    }
+
+    function command(id) {
+        const button = slash.querySelector(`[data-block="${id}"]`);
+        assert(button, `${id} exists`);
+        button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    }
+
+    function assertTableCommandsHidden(hidden) {
+        ['table-row-below', 'table-col-right', 'table-row-delete', 'table-col-delete'].forEach(id => {
+            assert(slash.querySelector(`[data-block="${id}"]`).hidden === hidden, `${id} hidden=${hidden}`);
+        });
+    }
+
+    try {
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        assertTableCommandsHidden(true);
+
+        editor.innerHTML = '<table><tbody><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></tbody></table>';
+
+        putSlashIn(editor.querySelector('td'));
+        assertTableCommandsHidden(false);
+        command('table-row-below');
+        assert(editor.querySelectorAll('tr').length === 3, 'row inserted');
+        assert(!editor.textContent.includes('/'), 'row command removed slash');
+
+        putSlashIn(editor.querySelectorAll('td')[1]);
+        command('table-col-right');
+        assert(editor.querySelector('tr').cells.length === 3, 'column inserted');
+
+        putSlashIn(editor.querySelectorAll('td')[3]);
+        command('table-row-delete');
+        assert(editor.querySelectorAll('tr').length === 2, 'row deleted');
+
+        putSlashIn(editor.querySelectorAll('td')[1]);
+        command('table-col-delete');
+        assert(editor.querySelector('tr').cells.length === 2, 'column deleted');
+
+        document.body.dataset.editorTableSmoke = 'pass';
+    } catch (error) {
+        document.body.dataset.editorTableSmoke = 'fail';
+        document.body.dataset.error = error.message;
+        throw error;
+    }
+})();
+</script>
