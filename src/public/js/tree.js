@@ -83,6 +83,7 @@ const TreeView = (() => {
         row.style.paddingLeft = (depth * 16 + 4) + 'px';   // deep-nesting indent
         row.dataset.relationId = node.relationId;
         row.dataset.noteId = node.noteId;
+        row.dataset.depth = depth;
 
         // caret
         const caret = document.createElement('span');
@@ -243,6 +244,81 @@ const TreeView = (() => {
 
     // ============================ DRAG & DROP ==============================
     let dragSource = null;   // { relationId, noteId }
+    const DROP_CLASSES = ['drop-inside', 'drop-before', 'drop-after', 'drop-first-child', 'drop-parent-after'];
+    let dropLine = null;
+
+    function clearDropClasses(row) {
+        row.classList.remove(...DROP_CLASSES);
+    }
+
+    function getDropLine() {
+        if (!dropLine || !elTree.contains(dropLine)) {
+            dropLine = document.createElement('div');
+            dropLine.className = 'tree-drop-line';
+            elTree.appendChild(dropLine);
+        }
+        return dropLine;
+    }
+
+    function hideDropLine() {
+        if (dropLine) dropLine.hidden = true;
+    }
+
+    function showDropLine(row, intent, depth) {
+        if (intent === 'inside') {
+            hideDropLine();
+            return;
+        }
+        const treeRect = elTree.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        const line = getDropLine();
+        const y = (intent === 'before' || intent === 'parent-after') ? rowRect.top : rowRect.bottom;
+        const x = rowRect.left - treeRect.left + elTree.scrollLeft + (depth * 16 + 4);
+        line.style.top = (y - treeRect.top + elTree.scrollTop - 1) + 'px';
+        line.style.left = x + 'px';
+        line.style.right = '4px';
+        line.hidden = false;
+    }
+
+    function isChildDropSide(e) {
+        const rect = elTree.getBoundingClientRect();
+        // ponytail: a single midpoint split matches the requested left/right pane behavior.
+        // If this needs per-user tuning later, make the ratio configurable.
+        return e.clientX >= rect.left + rect.width / 2;
+    }
+
+    function getDropIntent(row, e) {
+        const rect = row.getBoundingClientRect();
+        const offset = e.clientY - rect.top;
+        const h = rect.height;
+        if (offset < h * 0.25) {
+            const depth = Number(row.dataset.depth || 0);
+            if (depth > 0 && isFirstChildRow(row)) return isChildDropSide(e) ? 'before' : 'parent-after';
+            return 'before';
+        }
+        if (offset <= h * 0.75) return 'inside';
+
+        const nodeEl = row.parentElement;
+        const hasVisibleChildren = !!nodeEl.querySelector(':scope > .tree-children > .tree-node');
+        if (hasVisibleChildren && isChildDropSide(e)) return 'first-child';
+        return 'after';
+    }
+
+    function getSiblingRows(row) {
+        return [...row.parentElement.parentElement.querySelectorAll(':scope > .tree-node > .tree-row')];
+    }
+
+    function isFirstChildRow(row) {
+        const nodeEl = row.parentElement;
+        const childrenEl = nodeEl.parentElement;
+        return childrenEl && childrenEl.classList.contains('tree-children') && childrenEl.firstElementChild === nodeEl;
+    }
+
+    function getParentRow(row) {
+        const childrenEl = row.parentElement.parentElement;
+        if (!childrenEl || !childrenEl.classList.contains('tree-children')) return null;
+        return childrenEl.parentElement.querySelector(':scope > .tree-row');
+    }
 
     function onDragStart(e) {
         dragSource = {
@@ -256,8 +332,9 @@ const TreeView = (() => {
 
     function onDragEnd() {
         this.classList.remove('dragging');
-        document.querySelectorAll('.drop-inside,.drop-before,.drop-after')
-            .forEach(el => el.classList.remove('drop-inside', 'drop-before', 'drop-after'));
+        document.querySelectorAll('.drop-inside,.drop-before,.drop-after,.drop-first-child,.drop-parent-after')
+            .forEach(clearDropClasses);
+        hideDropLine();
         dragSource = null;
     }
 
@@ -268,18 +345,19 @@ const TreeView = (() => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
 
-        // Decide intent by cursor position within the row.
-        const rect = this.getBoundingClientRect();
-        const offset = e.clientY - rect.top;
-        const h = rect.height;
-        this.classList.remove('drop-inside', 'drop-before', 'drop-after');
-        if (offset < h * 0.25)              this.classList.add('drop-before');
-        else if (offset > h * 0.75)         this.classList.add('drop-after');
-        else                                this.classList.add('drop-inside');
+        const depth = Number(this.dataset.depth || 0);
+        const intent = getDropIntent(this, e);
+        const lineDepth = intent === 'first-child' ? depth + 1
+            : intent === 'parent-after' ? Math.max(0, depth - 1)
+            : depth;
+        clearDropClasses(this);
+        showDropLine(this, intent, lineDepth);
+        this.classList.add(`drop-${intent}`);
     }
 
     function onDragLeave() {
-        this.classList.remove('drop-inside', 'drop-before', 'drop-after');
+        clearDropClasses(this);
+        hideDropLine();
     }
 
     async function onDrop(e) {
@@ -298,11 +376,36 @@ const TreeView = (() => {
                     relationId: dragSource.relationId,
                     newParentId: targetNoteId,
                 });
+            } else if (cls.contains('drop-parent-after')) {
+                const parentRow = getParentRow(this);
+                const parentId  = parentRow.parentElement.dataset.parentId || 'root';
+                const siblingRows = getSiblingRows(parentRow);
+                const order = siblingRows.map(r => r.dataset.relationId);
+                const filtered = order.filter(rid => rid !== dragSource.relationId);
+                const targetIdx = filtered.indexOf(parentRow.dataset.relationId);
+                filtered.splice(targetIdx + 1, 0, dragSource.relationId);
+
+                await Api.moveNode({
+                    relationId: dragSource.relationId,
+                    newParentId: parentId,
+                });
+                await Api.reorderSiblings({ parentId, relationIds: filtered });
+            } else if (cls.contains('drop-first-child')) {
+                const targetRow = this;
+                const childRows = [...targetRow.parentElement.querySelectorAll(':scope > .tree-children > .tree-node > .tree-row')];
+                const order = childRows.map(r => r.dataset.relationId).filter(rid => rid !== dragSource.relationId);
+                order.unshift(dragSource.relationId);
+
+                await Api.moveNode({
+                    relationId: dragSource.relationId,
+                    newParentId: targetNoteId,
+                });
+                await Api.reorderSiblings({ parentId: targetNoteId, relationIds: order });
             } else {
                 // → reorder as sibling of target
                 const targetRow = this;
-                const parentId  = targetRow.parentElement.parentElement.dataset.noteId || 'root';
-                const siblingRows = [...targetRow.parentElement.querySelectorAll(':scope > .tree-node > .tree-row')];
+                const parentId  = targetRow.parentElement.dataset.parentId || 'root';
+                const siblingRows = getSiblingRows(targetRow);
                 const order = siblingRows.map(r => r.dataset.relationId);
 
                 // remove dragged (if present among siblings) and insert at target index
@@ -319,6 +422,7 @@ const TreeView = (() => {
                 await Api.reorderSiblings({ parentId, relationIds: filtered });
             }
             await TreeView.reload();
+            hideDropLine();
         } catch (err) {
             alert('Move failed: ' + err.message);
         }
