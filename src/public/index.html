@@ -30,13 +30,6 @@
             <i class="bx bx-cube logo-icon"></i>
             <span class="app-title">Notes</span>
         </div>
-        <div class="topbar-center">
-            <div class="global-search">
-                <i class="bx bx-search"></i>
-                <input id="globalSearch" type="text" placeholder="Search notes…" autocomplete="off" />
-                <ul id="searchResults" class="search-results" hidden></ul>
-            </div>
-        </div>
         <div class="topbar-right">
             <button id="newRootNoteBtn" class="btn btn-ghost" title="New top-level note">
                 <i class="bx bx-file-plus"></i>
@@ -97,6 +90,16 @@
                 <button data-cmd="formatBlock" data-val="BLOCKQUOTE" title="Quote"><i class="bx bx-quote-left"></i></button>
                 <span class="sep"></span>
                 <button data-cmd="createLink" title="Link"><i class="bx bx-link"></i></button>
+            </div>
+            <div id="searchToolbar" class="search-toolbar" hidden>
+                <div class="toolbar-search">
+                    <i class="bx bx-search"></i>
+                    <input id="toolbarSearch" type="search" placeholder="Search notes…" autocomplete="off" />
+                    <ul id="toolbarSearchResults" class="search-results" hidden></ul>
+                </div>
+                <button id="closeSearchToolbar" class="btn btn-ghost search-close" title="Close search" aria-label="Close search">
+                    <i class="bx bx-x"></i>
+                </button>
             </div>
         </section>
     </main>

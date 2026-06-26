@@ -86,8 +86,15 @@ function initResizer() {
 
 // ============================== SEARCH =====================================
 function initSearch() {
-    const input = document.getElementById('globalSearch');
-    const resultsEl = document.getElementById('searchResults');
+    const toolbarInput = document.getElementById('toolbarSearch');
+    const toolbarResults = document.getElementById('toolbarSearchResults');
+    const closeToolbar = document.getElementById('closeSearchToolbar');
+
+    initSearchBox(toolbarInput, toolbarResults, '.search-toolbar', closeSearchToolbar);
+    closeToolbar.addEventListener('click', closeSearchToolbar);
+}
+
+function initSearchBox(input, resultsEl, containerSelector, onSelect) {
     let timer = null;
 
     input.addEventListener('input', () => {
@@ -97,7 +104,7 @@ function initSearch() {
         timer = setTimeout(async () => {
             try {
                 const results = await Api.search(q);
-                renderSearchResults(resultsEl, results, q);
+                renderSearchResults(resultsEl, results, q, onSelect);
             } catch (e) {
                 resultsEl.hidden = true;
             }
@@ -108,7 +115,7 @@ function initSearch() {
         if (input.value.trim()) resultsEl.hidden = false;
     });
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('.global-search')) resultsEl.hidden = true;
+        if (!e.target.closest(containerSelector)) resultsEl.hidden = true;
     });
 
     input.addEventListener('keydown', (e) => {
@@ -116,18 +123,36 @@ function initSearch() {
             const first = resultsEl.querySelector('li[data-noteid]');
             if (first) first.click();
         }
-        if (e.key === 'Escape') { input.value = ''; resultsEl.hidden = true; }
+        if (e.key === 'Escape') {
+            input.value = '';
+            resultsEl.hidden = true;
+            closeSearchToolbar();
+        }
     });
 }
 
 function openSearch() {
-    const input = document.getElementById('globalSearch');
+    const toolbar = document.getElementById('searchToolbar');
+    const formatToolbar = document.getElementById('formatToolbar');
+    const input = document.getElementById('toolbarSearch');
+    toolbar.hidden = false;
+    formatToolbar.hidden = true;
     input.focus();
     input.select();
     input.dispatchEvent(new Event('focus'));
 }
 
-function renderSearchResults(el, results, q) {
+function closeSearchToolbar() {
+    const toolbar = document.getElementById('searchToolbar');
+    const input = document.getElementById('toolbarSearch');
+    const results = document.getElementById('toolbarSearchResults');
+    toolbar.hidden = true;
+    input.value = '';
+    results.hidden = true;
+    document.dispatchEvent(new Event('selectionchange'));
+}
+
+function renderSearchResults(el, results, q, onSelect) {
     if (results.length === 0) {
         el.innerHTML = `<li class="empty">No matches for "${q}"</li>`;
     } else {
@@ -146,7 +171,7 @@ function renderSearchResults(el, results, q) {
             const noteId = li.dataset.noteid;
             await Editor.load(noteId);
             el.hidden = true;
-            document.getElementById('globalSearch').value = '';
+            if (onSelect) onSelect();
         });
     });
 }

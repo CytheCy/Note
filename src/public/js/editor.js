@@ -12,6 +12,7 @@ const Editor = (() => {
     const elEmpty   = document.getElementById('emptyState');
     const elRich    = document.getElementById('richTextEditor');
     const elToolbar = document.getElementById('formatToolbar');
+    const elSearchToolbar = document.getElementById('searchToolbar');
     const elSlash   = document.getElementById('slashMenu');
     const elCodeCopy = document.createElement('button');
 
@@ -242,7 +243,7 @@ const Editor = (() => {
     }
 
     function syncToolbarVisibility() {
-        elToolbar.hidden = !selectedTextInEditor();
+        elToolbar.hidden = !selectedTextInEditor() || elSearchToolbar?.hidden === false;
     }
 
     function selectedTextInEditor() {
