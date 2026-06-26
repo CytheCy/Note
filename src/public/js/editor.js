@@ -137,7 +137,13 @@ const Editor = (() => {
             }
             return;
         }
-        if (e.key === 'Enter' && handleCodeBlockEnter()) {
+        if (e.key === 'Enter' && handleTitledNoteTitleEnter()) {
+            e.preventDefault();
+            scheduleSave();
+        } else if (e.key === 'Enter' && handleTitledNoteBodyExit()) {
+            e.preventDefault();
+            scheduleSave();
+        } else if (e.key === 'Enter' && handleCodeBlockEnter()) {
             e.preventDefault();
             scheduleSave();
         } else if (e.key === 'Enter' && handleChecklistEnter()) {
@@ -462,6 +468,52 @@ const Editor = (() => {
     function disarmCodeExit() {
         codeExitArmed = false;
         codeExitBreak = null;
+    }
+
+    function handleTitledNoteTitleEnter() {
+        const title = currentTitledNoteTitle();
+        if (!title) return false;
+
+        const section = title.closest('.titled-note');
+        let body = section.querySelector('p');
+        if (!body) {
+            body = document.createElement('p');
+            body.innerHTML = '<br>';
+            section.append(body);
+        }
+        placeCaretIn(body);
+        return true;
+    }
+
+    function currentTitledNoteTitle() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
+        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
+        const title = node?.closest?.('.titled-note h2');
+        return title && elRich.contains(title) ? title : null;
+    }
+
+    function handleTitledNoteBodyExit() {
+        const body = currentTitledNoteBody();
+        if (!body || !isEmptyParagraph(body)) return false;
+
+        const section = body.closest('.titled-note');
+        const p = isEmptyParagraph(section.nextElementSibling) ? section.nextElementSibling : document.createElement('p');
+        if (!p.isConnected) {
+            p.innerHTML = '<br>';
+            section.after(p);
+        }
+        body.remove();
+        placeCaretIn(p);
+        return true;
+    }
+
+    function currentTitledNoteBody() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
+        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
+        const body = node?.closest?.('.titled-note p');
+        return body && elRich.contains(body) ? body : null;
     }
 
     function handleChecklistEnter() {

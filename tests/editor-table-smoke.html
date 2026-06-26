@@ -51,6 +51,15 @@
         sel.addRange(range);
     }
 
+    function placeCaretIn(node) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
     function pressEnter() {
         editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     }
@@ -97,6 +106,20 @@
         assert(!editor.textContent.includes('Title'), 'titled note does not insert title placeholder text');
         assert(!editor.textContent.includes('Note text'), 'titled note does not insert body placeholder text');
         assert(titled.querySelector('h2').contains(selectionContainer()), 'caret placed inside titled note title');
+        titled.querySelector('h2').textContent = 'My Title';
+        placeCaretInText(titled.querySelector('h2'), 8);
+        pressEnter();
+        assert(titled.querySelectorAll('p').length === 1, 'enter in titled note title reuses existing body line');
+        assert(titled.querySelector('p').contains(selectionContainer()), 'enter in titled note title moves caret to body line');
+        titled.querySelector('p').textContent = 'Body';
+        const blankTitledLine = document.createElement('p');
+        blankTitledLine.innerHTML = '<br>';
+        titled.append(blankTitledLine);
+        placeCaretIn(blankTitledLine);
+        pressEnter();
+        assert(titled.querySelectorAll('p').length === 1, 'enter on empty titled note body line removes that line');
+        assert(titled.nextElementSibling?.tagName === 'P', 'enter on empty titled note body line exits below titled note');
+        assert(titled.nextElementSibling.contains(selectionContainer()), 'caret moves below titled note body');
 
         editor.innerHTML = '<pre><code>one\n\nthree</code></pre><p><br></p>';
         const existingBlankLineCode = editor.querySelector('pre code');
