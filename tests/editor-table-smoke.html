@@ -82,6 +82,22 @@
         assert(editor.querySelectorAll('p').length === 1, 'second enter reuses existing text line below code block');
         assert(code.closest('pre').nextElementSibling.contains(selectionContainer()), 'caret exits to text line below code block');
 
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        command('heading');
+        assert(editor.querySelector('h2'), 'heading inserted');
+        assert(!editor.textContent.includes('Heading'), 'heading command does not insert placeholder text');
+        assert(editor.querySelector('h2').contains(selectionContainer()), 'caret placed inside heading');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        command('titled');
+        const titled = editor.querySelector('.titled-note');
+        assert(titled, 'titled note inserted');
+        assert(!editor.textContent.includes('Title'), 'titled note does not insert title placeholder text');
+        assert(!editor.textContent.includes('Note text'), 'titled note does not insert body placeholder text');
+        assert(titled.querySelector('h2').contains(selectionContainer()), 'caret placed inside titled note title');
+
         editor.innerHTML = '<pre><code>one\n\nthree</code></pre><p><br></p>';
         const existingBlankLineCode = editor.querySelector('pre code');
         placeCaretInText(existingBlankLineCode, 4);

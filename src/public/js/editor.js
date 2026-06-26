@@ -35,9 +35,9 @@ const Editor = (() => {
         ['table-row-delete', 'bx bx-trash', 'Delete table row', deleteTableRow],
         ['table-col-delete', 'bx bx-trash', 'Delete table column', deleteTableColumn],
         ['code', 'bx bx-code-alt', 'Code block', '<pre><code><span data-slash-caret></span><br></code></pre><p><br></p>'],
-        ['heading', 'bx bx-heading', 'Heading', '<h2>Heading</h2><p><br></p>'],
+        ['heading', 'bx bx-heading', 'Heading', '<h2><span data-slash-caret></span><br></h2><p><br></p>'],
         ['divider', 'bx bx-minus', 'Divider', '<hr><p><br></p>'],
-        ['titled', 'bx bx-note', 'Titled Note', '<section class="titled-note"><h2>Title</h2><p>Note text</p></section><p><br></p>'],
+        ['titled', 'bx bx-note', 'Titled Note', '<section class="titled-note"><h2><span data-slash-caret></span><br></h2><p><br></p></section><p><br></p>'],
     ];
     elCodeCopy.type = 'button';
     elCodeCopy.className = 'code-copy-btn';
