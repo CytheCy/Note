@@ -55,6 +55,9 @@
                 <button id="treeSearchBtn" class="btn btn-ghost tree-footer-action" title="Search notes" aria-label="Search notes">
                     <i class="bx bx-search"></i>
                 </button>
+                <button id="treeSettingsBtn" class="btn btn-ghost tree-footer-action" title="Settings" aria-label="Settings">
+                    <i class="bx bx-cog"></i>
+                </button>
             </div>
         </aside>
 
@@ -76,6 +79,39 @@
                     <p>Select or create a note to begin.</p>
                 </div>
                 <div id="richTextEditor" class="rich-text-editor" contenteditable="true" hidden></div>
+                <div id="settingsPage" class="settings-page" hidden>
+                    <nav class="settings-categories" aria-label="Settings categories">
+                        <button class="settings-category active" type="button">
+                            <i class="bx bx-palette"></i>
+                            <span>Appearance</span>
+                        </button>
+                    </nav>
+                    <div class="settings-content">
+                        <section class="settings-section">
+                            <h2>Appearance</h2>
+                            <div class="settings-row">
+                                <label for="themeAuto">Theme</label>
+                                <div class="theme-options" id="themeOptions">
+                                    <label class="theme-option" data-value="auto">
+                                        <input type="radio" name="theme" value="auto" id="themeAuto" />
+                                        <span class="swatch"></span>
+                                        <span>Auto</span>
+                                    </label>
+                                    <label class="theme-option" data-value="light">
+                                        <input type="radio" name="theme" value="light" id="themeLight" />
+                                        <span class="swatch"></span>
+                                        <span>Light</span>
+                                    </label>
+                                    <label class="theme-option" data-value="dark">
+                                        <input type="radio" name="theme" value="dark" id="themeDark" />
+                                        <span class="swatch"></span>
+                                        <span>Dark</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
                 <div id="slashMenu" class="slash-menu" hidden></div>
             </div>
 
@@ -131,46 +167,6 @@
             </div>
             <div class="modal-body" id="propsBody">
                 <!-- injected -->
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" data-close>Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ====================== SETTINGS MODAL ======================= -->
-    <div id="settingsOverlay" class="modal-overlay" hidden>
-        <div class="modal">
-            <div class="modal-header">
-                <h3><i class="bx bx-cog"></i> Settings</h3>
-                <button class="modal-close" data-close aria-label="Close">
-                    <i class="bx bx-x"></i><span class="close-x-fallback">✕</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="settings-section">
-                    <h4>Appearance</h4>
-                    <div class="settings-row">
-                        <label for="themeAuto">Theme</label>
-                        <div class="theme-options" id="themeOptions">
-                            <label class="theme-option" data-value="auto">
-                                <input type="radio" name="theme" value="auto" id="themeAuto" />
-                                <span class="swatch"></span>
-                                <span>Auto</span>
-                            </label>
-                            <label class="theme-option" data-value="light">
-                                <input type="radio" name="theme" value="light" id="themeLight" />
-                                <span class="swatch"></span>
-                                <span>Light</span>
-                            </label>
-                            <label class="theme-option" data-value="dark">
-                                <input type="radio" name="theme" value="dark" id="themeDark" />
-                                <span class="swatch"></span>
-                                <span>Dark</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-primary" data-close>Close</button>

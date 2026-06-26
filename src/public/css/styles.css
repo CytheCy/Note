@@ -155,6 +155,7 @@ button { font-family: inherit; cursor: pointer; }
     border-top: 1px solid var(--border);
     padding: 6px 8px;
     display: flex;
+    gap: 4px;
     justify-content: flex-start;
 }
 .tree-footer-action {
@@ -407,15 +408,57 @@ button { font-family: inherit; cursor: pointer; }
 ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; background-clip: content-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* ============================== SETTINGS MODAL ========================= */
-.settings-section { margin-bottom: 18px; }
+/* ============================== SETTINGS PAGE ========================== */
+.settings-page {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    background: var(--bg);
+}
+.settings-categories {
+    width: 190px;
+    flex: 0 0 190px;
+    padding: 12px 8px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+}
+.settings-category {
+    width: 100%;
+    height: 32px;
+    border: 0;
+    border-radius: 5px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: left;
+}
+.settings-category:hover { background: var(--sidebar-hover); color: var(--text); }
+.settings-category.active { background: var(--sidebar-active); color: var(--text); }
+.settings-category .bx { font-size: 16px; }
+.settings-content {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: 24px 32px;
+}
+.settings-section {
+    max-width: 720px;
+    margin-bottom: 18px;
+}
 .settings-section:last-child { margin-bottom: 0; }
-.settings-section h4 {
-    margin: 0 0 10px; font-size: 12px; text-transform: uppercase;
-    letter-spacing: .05em; color: var(--text-muted);
+.settings-section h2 {
+    margin: 0 0 18px;
+    font-size: 20px;
+    font-weight: 600;
 }
 .settings-row {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
 }
 .settings-row label { font-size: 14px; }
 .theme-options { display: flex; gap: 8px; }
@@ -446,4 +489,13 @@ button { font-family: inherit; cursor: pointer; }
 /* ============================== RESPONSIVE ============================== */
 @media (max-width: 700px) {
     .pane-sidebar { position: absolute; z-index: 20; height: calc(100vh - var(--topbar-h)); box-shadow: 2px 0 8px rgba(0,0,0,.15); }
+    .settings-page { flex-direction: column; }
+    .settings-categories {
+        width: auto;
+        flex: 0 0 auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+    }
+    .settings-content { padding: 18px; }
+    .settings-row { align-items: flex-start; flex-direction: column; }
 }

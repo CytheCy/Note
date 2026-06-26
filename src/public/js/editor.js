@@ -11,6 +11,7 @@ const Editor = (() => {
     const elIcon    = document.getElementById('noteTypeIcon');
     const elEmpty   = document.getElementById('emptyState');
     const elRich    = document.getElementById('richTextEditor');
+    const elSettings = document.getElementById('settingsPage');
     const elToolbar = document.getElementById('formatToolbar');
     const elSearchToolbar = document.getElementById('searchToolbar');
     const elSlash   = document.getElementById('slashMenu');
@@ -56,6 +57,7 @@ const Editor = (() => {
         suppressLoad = true;
 
         elEmpty.hidden = true;
+        elSettings.hidden = true;
         elTitle.disabled = false;
 
         elTitle.value = note.title;
@@ -73,7 +75,7 @@ const Editor = (() => {
     function clear() {
         currentNote = null;
         elEmpty.hidden = false;
-        elRich.hidden = true; elToolbar.hidden = true;
+        elRich.hidden = true; elSettings.hidden = true; elToolbar.hidden = true;
         elTitle.disabled = true;
         elTitle.value = '';
         elIcon.className = 'bx bx-file';
@@ -235,6 +237,21 @@ const Editor = (() => {
             currentNote.icon = icon || null;
             elIcon.className = icon || 'bx bx-file';
         }
+    }
+
+    async function showSettings() {
+        await saveNow();
+        currentNote = null;
+        elEmpty.hidden = true;
+        elRich.hidden = true;
+        elToolbar.hidden = true;
+        elSearchToolbar.hidden = true;
+        elSettings.hidden = false;
+        elTitle.disabled = true;
+        elTitle.value = 'Settings';
+        elIcon.className = 'bx bx-cog';
+        hideSlashMenu();
+        hideCodeCopy();
     }
 
     function selectionInEditor() {
@@ -660,5 +677,5 @@ const Editor = (() => {
         textarea.remove();
     }
 
-    return { load, clear, saveNow, setTitleIfCurrent, setIconIfCurrent };
+    return { load, clear, saveNow, showSettings, setTitleIfCurrent, setIconIfCurrent };
 })();

@@ -28,11 +28,11 @@
     // Fallbacks keep things working in a plain browser (no Electron IPC).
     initNativeMenu();
 
-    // ---- Settings modal + theme switching --------------------------------
+    // ---- Settings page + theme switching ---------------------------------
     initSettings();
 
     // ---- modal close ------------------------------------------------------
-    // Applies to every .modal-overlay (Properties + Settings).
+    // Applies to every .modal-overlay.
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay || e.target.closest('[data-close]')) overlay.hidden = true;
@@ -50,6 +50,10 @@
     document.getElementById('treeSearchBtn').addEventListener('click', (e) => {
         e.stopPropagation();
         openSearch();
+    });
+    document.getElementById('treeSettingsBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSettings();
     });
 
     // ---- initial load -----------------------------------------------------
@@ -115,7 +119,9 @@ function initSearchBox(input, resultsEl, containerSelector, onSelect) {
         if (input.value.trim()) resultsEl.hidden = false;
     });
     document.addEventListener('click', (e) => {
-        if (!e.target.closest(containerSelector)) resultsEl.hidden = true;
+        if (e.target.closest(containerSelector)) return;
+        resultsEl.hidden = true;
+        if (!input.closest(containerSelector)?.hidden && onSelect) onSelect();
     });
 
     input.addEventListener('keydown', (e) => {
@@ -219,7 +225,7 @@ function applyTheme(value) {
     const v = ['light', 'dark', 'auto'].includes(value) ? value : 'auto';
     document.documentElement.setAttribute('data-theme', v);
     try { localStorage.setItem('theme', v); } catch (_) {}
-    // Sync the selected option in the Settings modal, if open.
+    // Sync the selected option in the Settings page.
     document.querySelectorAll('#themeOptions .theme-option').forEach(opt => {
         opt.classList.toggle('selected', opt.dataset.value === v);
     });
@@ -230,7 +236,7 @@ function applyTheme(value) {
 
 function openSettings() {
     applyTheme(getStoredTheme());   // refresh selected highlight
-    document.getElementById('settingsOverlay').hidden = false;
+    Editor.showSettings().catch(e => alert('Action failed: ' + e.message));
 }
 
 function initSettings() {
