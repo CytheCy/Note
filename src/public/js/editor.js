@@ -16,6 +16,7 @@ const Editor = (() => {
     const elSearchToolbar = document.getElementById('searchToolbar');
     const elSlash   = document.getElementById('slashMenu');
     const elCodeCopy = document.createElement('button');
+    const LAST_NOTE_KEY = 'lastNoteId';
 
     let currentNote = null;
     let saveTimer = null;
@@ -53,6 +54,7 @@ const Editor = (() => {
     async function load(noteId) {
         if (!noteId) return clear();
         const note = await Api.getNote(noteId);
+        try { localStorage.setItem(LAST_NOTE_KEY, note.noteId); } catch (_) {}
         currentNote = note;
         suppressLoad = true;
 

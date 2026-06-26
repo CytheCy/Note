@@ -3,7 +3,7 @@
  * Also wires up: sidebar resize, global search, top-bar buttons, modal close.
  */
 
-(function bootstrap() {
+(async function bootstrap() {
     // ---- TreeView → Editor wiring ----------------------------------------
     TreeView.onNoteSelected(async (node) => {
         await Editor.load(node.noteId);
@@ -57,7 +57,8 @@
     });
 
     // ---- initial load -----------------------------------------------------
-    TreeView.reload();
+    await TreeView.reload();
+    await restoreLastNote();
 })();
 
 // ============================== RESIZER ====================================
@@ -190,6 +191,17 @@ function escapeHtml(s) {
     return (s || '').replace(/[&<>"']/g, c => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
     })[c]);
+}
+
+async function restoreLastNote() {
+    let noteId;
+    try { noteId = localStorage.getItem('lastNoteId'); } catch (_) {}
+    if (!noteId) return;
+    try {
+        await Editor.load(noteId);
+    } catch (e) {
+        try { localStorage.removeItem('lastNoteId'); } catch (_) {}
+    }
 }
 
 // ============================== NATIVE MENU (Electron) =====================
