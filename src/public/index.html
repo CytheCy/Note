@@ -30,15 +30,15 @@
         <aside id="sidebar" class="pane pane-sidebar">
             <div class="pane-header">
                 <span><i class="bx bx-folder-open"></i> Note Tree</span>
-                <button id="newNoteBtn" class="btn btn-ghost pane-header-action" title="Add a note">
-                    <i class="bx bx-plus"></i>
-                </button>
             </div>
             <div id="tree" class="tree" role="tree">
                 <!-- tree nodes injected by tree.js -->
                 <div class="tree-empty">Loading…</div>
             </div>
             <div class="tree-footer">
+                <button id="newNoteBtn" class="btn btn-ghost tree-footer-action" title="Add a note" aria-label="Add a note">
+                    <i class="bx bx-plus"></i>
+                </button>
                 <button id="treeExpandBtn" class="btn btn-ghost tree-footer-action" title="Expand all notes" aria-label="Expand all notes">
                     <i class="bx bx-expand-alt"></i>
                 </button>
