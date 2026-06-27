@@ -12,17 +12,24 @@ const rootTree = {
         {
             relationId: 'r-parent',
             noteId: 'parent',
-            parentId: 'root',
             title: 'Parent',
             type: 'text',
-            childCount: 1,
+            childCount: 2,
             isExpanded: true,
             children: [
                 {
-                    relationId: 'r-child',
-                    noteId: 'child',
-                    parentId: 'parent',
-                    title: 'Child',
+                    relationId: 'r-child-a',
+                    noteId: 'child-a',
+                    title: 'Child A',
+                    type: 'text',
+                    childCount: 0,
+                    isExpanded: false,
+                    children: [],
+                },
+                {
+                    relationId: 'r-child-b',
+                    noteId: 'child-b',
+                    title: 'Child B',
                     type: 'text',
                     childCount: 0,
                     isExpanded: false,
@@ -33,12 +40,30 @@ const rootTree = {
         {
             relationId: 'r-source',
             noteId: 'source',
-            parentId: 'root',
             title: 'Source',
             type: 'text',
             childCount: 0,
             isExpanded: false,
             children: [],
+        },
+        {
+            relationId: 'r-source-parent',
+            noteId: 'source-parent',
+            title: 'Source Parent',
+            type: 'text',
+            childCount: 1,
+            isExpanded: true,
+            children: [
+                {
+                    relationId: 'r-source-child',
+                    noteId: 'source-child',
+                    title: 'Source Child',
+                    type: 'text',
+                    childCount: 0,
+                    isExpanded: false,
+                    children: [],
+                },
+            ],
         },
     ],
 };
@@ -96,7 +121,7 @@ window.Api = {
         parent.dispatchEvent(dragEvent('drop', leftSideX, rect.bottom - 2, dt));
         await new Promise(resolve => setTimeout(resolve, 0));
         assert(calls[0][1].newParentId === 'root', 'sibling drop keeps root parent');
-        assert(calls[1][1].relationIds.join(',') === 'r-parent,r-source', 'sibling drop reorders after parent');
+        assert(calls[1][1].relationIds.join(',') === 'r-parent,r-source,r-source-parent', 'sibling drop reorders after parent');
 
         calls.length = 0;
         source.dispatchEvent(new DragEvent('dragend', { bubbles: true }));
@@ -110,22 +135,22 @@ window.Api = {
         row('parent').dispatchEvent(dragEvent('drop', rightSideX, rect.bottom - 2, dt));
         await new Promise(resolve => setTimeout(resolve, 0));
         assert(calls[0][1].newParentId === 'parent', 'first-child drop moves under parent');
-        assert(calls[1][1].relationIds.join(',') === 'r-source,r-child', 'first-child drop reorders above existing child');
+        assert(calls[1][1].relationIds.join(',') === 'r-source,r-child-a,r-child-b', 'first-child drop reorders above existing children');
 
         calls.length = 0;
         row('source').dispatchEvent(new DragEvent('dragend', { bubbles: true }));
         await TreeView.reload();
 
-        const childRect = row('child').getBoundingClientRect();
+        const childRect = row('child-a').getBoundingClientRect();
         dt = new DataTransfer();
         row('source').dispatchEvent(dragEvent('dragstart', 0, 0, dt));
-        row('child').dispatchEvent(dragEvent('dragover', leftSideX, childRect.top + 2, dt));
-        assert(row('child').classList.contains('drop-parent-after'), 'unindented top of first child drops after parent');
+        row('child-a').dispatchEvent(dragEvent('dragover', leftSideX, childRect.top + 2, dt));
+        assert(row('child-a').classList.contains('drop-parent-after'), 'unindented top of first child drops after parent');
         assert(lineLeft() === parentLineLeft, 'first-child top line can unindent to parent depth');
-        row('child').dispatchEvent(dragEvent('drop', leftSideX, childRect.top + 2, dt));
+        row('child-a').dispatchEvent(dragEvent('drop', leftSideX, childRect.top + 2, dt));
         await new Promise(resolve => setTimeout(resolve, 0));
         assert(calls[0][1].newParentId === 'root', 'unindented first-child gap keeps root parent');
-        assert(calls[1][1].relationIds.join(',') === 'r-parent,r-source', 'unindented first-child gap reorders after parent');
+        assert(calls[1][1].relationIds.join(',') === 'r-parent,r-source,r-source-parent', 'unindented first-child gap reorders after parent');
 
         calls.length = 0;
         row('source').dispatchEvent(new DragEvent('dragend', { bubbles: true }));
@@ -133,13 +158,27 @@ window.Api = {
 
         dt = new DataTransfer();
         row('source').dispatchEvent(dragEvent('dragstart', 0, 0, dt));
-        row('child').dispatchEvent(dragEvent('dragover', rightSideX, childRect.top + 2, dt));
-        assert(row('child').classList.contains('drop-before'), 'indented top of first child drops before child');
+        row('child-a').dispatchEvent(dragEvent('dragover', rightSideX, childRect.top + 2, dt));
+        assert(row('child-a').classList.contains('drop-before'), 'indented top of first child drops before child');
         assert(lineLeft() === parentLineLeft + 16, 'first-child top line can indent to child depth');
-        row('child').dispatchEvent(dragEvent('drop', rightSideX, childRect.top + 2, dt));
+        row('child-a').dispatchEvent(dragEvent('drop', rightSideX, childRect.top + 2, dt));
         await new Promise(resolve => setTimeout(resolve, 0));
         assert(calls[0][1].newParentId === 'parent', 'indented first-child gap moves under parent');
-        assert(calls[1][1].relationIds.join(',') === 'r-source,r-child', 'indented first-child gap reorders above child');
+        assert(calls[1][1].relationIds.join(',') === 'r-source,r-child-a,r-child-b', 'indented first-child gap reorders above child');
+
+        calls.length = 0;
+        row('source').dispatchEvent(new DragEvent('dragend', { bubbles: true }));
+        await TreeView.reload();
+
+        const secondChildRect = row('child-b').getBoundingClientRect();
+        dt = new DataTransfer();
+        row('source-parent').dispatchEvent(dragEvent('dragstart', 0, 0, dt));
+        row('child-b').dispatchEvent(dragEvent('dragover', rightSideX, secondChildRect.top + 2, dt));
+        assert(row('child-b').classList.contains('drop-before'), 'dropping a parent note between children stays on the child lane');
+        row('child-b').dispatchEvent(dragEvent('drop', rightSideX, secondChildRect.top + 2, dt));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert(calls[0][1].newParentId === 'parent', 'parent note dropped between children becomes a child');
+        assert(calls[1][1].relationIds.join(',') === 'r-child-a,r-source-parent,r-child-b', 'parent note reorders between the target children');
 
         document.body.dataset.treeDragDropSmoke = 'pass';
     } catch (error) {

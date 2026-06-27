@@ -71,12 +71,12 @@ const TreeView = (() => {
     }
 
     // ---- recursive render --------------------------------------------------
-    function renderNode(node, depth) {
+    function renderNode(node, depth, parentId = 'root') {
         const wrap = document.createElement('div');
         wrap.className = 'tree-node';
         wrap.dataset.relationId = node.relationId;
         wrap.dataset.noteId = node.noteId;
-        wrap.dataset.parentId = node.parentId || '';
+        wrap.dataset.parentId = parentId;
 
         const row = document.createElement('div');
         row.className = 'tree-row';
@@ -151,7 +151,7 @@ const TreeView = (() => {
         if (hasChildren && node.isExpanded && node.children) {
             const childWrap = document.createElement('div');
             childWrap.className = 'tree-children';
-            node.children.forEach(child => childWrap.appendChild(renderNode(child, depth + 1)));
+            node.children.forEach(child => childWrap.appendChild(renderNode(child, depth + 1, node.noteId)));
             wrap.appendChild(childWrap);
         }
         return wrap;
