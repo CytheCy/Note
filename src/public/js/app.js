@@ -42,6 +42,14 @@
 
     // ---- global search ----------------------------------------------------
     initSearch();
+    document.getElementById('treeExpandBtn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await TreeView.setAllExpanded(true);
+    });
+    document.getElementById('treeCollapseBtn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await TreeView.setAllExpanded(false);
+    });
     document.getElementById('treeSearchBtn').addEventListener('click', (e) => {
         e.stopPropagation();
         openSearch();

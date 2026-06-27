@@ -40,6 +40,7 @@ const TreeView = (() => {
     let selectedRelationId = null;   // currently selected row
     let selectedNoteId = null;
     let onNoteSelectedCb = null;     // callback set by app.js
+    let currentTree = null;
 
     // ---- helpers -----------------------------------------------------------
     function isFolder(node) {
@@ -158,6 +159,7 @@ const TreeView = (() => {
     }
 
     function renderAll(rootTree) {
+        currentTree = rootTree;
         elTree.innerHTML = '';
         const kids = rootTree.children || [];
         if (kids.length === 0) {
@@ -193,19 +195,22 @@ const TreeView = (() => {
     }
 
     async function expandCollapseAll(node, wrap, depth, expand) {
+        await setExpandedState(node, expand);
+        const fresh = renderNode(node, depth);
+        wrap.replaceWith(fresh);
+    }
+
+    async function setExpandedState(node, expand) {
+        const pending = [];
         const walk = (n) => {
             n.isExpanded = expand;
+            if (n.childCount > 0) {
+                pending.push(Api.setExpanded({ relationId: n.relationId, isExpanded: expand }));
+            }
             if (n.children) n.children.forEach(walk);
         };
         walk(node);
-        // persist to backend
-        const persist = (n) => {
-            if (n.childCount > 0) Api.setExpanded({ relationId: n.relationId, isExpanded: expand });
-            if (n.children) n.children.forEach(persist);
-        };
-        persist(node);
-        const fresh = renderNode(node, depth);
-        wrap.replaceWith(fresh);
+        await Promise.all(pending);
     }
 
     // ---- rename (inline) ---------------------------------------------------
@@ -663,5 +668,10 @@ const TreeView = (() => {
         showProperties,
         openIconPicker,
         iconFor,
+        async setAllExpanded(expand) {
+            if (!currentTree?.children?.length) return;
+            await Promise.all(currentTree.children.map(node => setExpandedState(node, expand)));
+            renderAll(currentTree);
+        },
     };
 })();
