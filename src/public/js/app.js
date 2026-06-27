@@ -9,11 +9,6 @@
         await Editor.load(node.noteId);
     });
 
-    // ---- top-bar buttons --------------------------------------------------
-    document.getElementById('newRootNoteBtn').addEventListener('click', async () => {
-        await TreeView.createChild('root', 'text', 'New Note');
-    });
-
     // ---- sidebar "add note" button ---------------------------------------
     // Creates a new note: as a child of the selected note if one is selected
     // (and is not the root), otherwise as a top-level note.

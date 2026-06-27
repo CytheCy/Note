@@ -24,19 +24,6 @@
     </script>
 </head>
 <body>
-    <!-- ====================== TOP BAR ====================== -->
-    <header class="topbar">
-        <div class="topbar-left">
-            <i class="bx bx-cube logo-icon"></i>
-            <span class="app-title">Notes</span>
-        </div>
-        <div class="topbar-right">
-            <button id="newRootNoteBtn" class="btn btn-ghost" title="New top-level note">
-                <i class="bx bx-file-plus"></i>
-            </button>
-        </div>
-    </header>
-
     <!-- ====================== MAIN SPLIT ====================== -->
     <main class="layout">
         <!-- ---------- LEFT: TREE ---------- -->
@@ -85,6 +72,14 @@
                             <i class="bx bx-palette"></i>
                             <span>Appearance</span>
                         </button>
+                        <button class="settings-category" type="button">
+                            <i class="bx bx-command"></i>
+                            <span>Hotkeys</span>
+                        </button>
+                        <button class="settings-category" type="button">
+                            <i class="bx bx-info-circle"></i>
+                            <span>About</span>
+                        </button>
                     </nav>
                     <div class="settings-content">
                         <section class="settings-section">
@@ -108,6 +103,104 @@
                                         <span>Dark</span>
                                     </label>
                                 </div>
+                            </div>
+                        </section>
+                        <section class="settings-section">
+                            <h2>Hotkeys</h2>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Save note</label>
+                                    <span class="settings-help">Force-save the current note immediately.</span>
+                                </div>
+                                <div class="shortcut-keys" aria-label="Save note hotkey">
+                                    <kbd>Ctrl</kbd>
+                                    <span>+</span>
+                                    <kbd>S</kbd>
+                                    <span class="shortcut-or">or</span>
+                                    <kbd>Cmd</kbd>
+                                    <span>+</span>
+                                    <kbd>S</kbd>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Full screen mode</label>
+                                </div>
+                                <div class="shortcut-keys" aria-label="Full screen mode hotkey">
+                                    <kbd>F11</kbd>
+                                    <span class="shortcut-or">or</span>
+                                    <kbd>Ctrl</kbd>
+                                    <span>+</span>
+                                    <kbd>Cmd</kbd>
+                                    <span>+</span>
+                                    <kbd>F</kbd>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>New Note</label>
+                                </div>
+                                <div class="shortcut-keys" aria-label="New Note hotkey">
+                                    <kbd>Ctrl</kbd>
+                                    <span>+</span>
+                                    <kbd>N</kbd>
+                                    <span class="shortcut-or">or</span>
+                                    <kbd>Cmd</kbd>
+                                    <span>+</span>
+                                    <kbd>N</kbd>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Quit</label>
+                                </div>
+                                <div class="shortcut-keys" aria-label="Quit hotkey">
+                                    <kbd>Ctrl</kbd>
+                                    <span>+</span>
+                                    <kbd>Q</kbd>
+                                    <span class="shortcut-or">or</span>
+                                    <kbd>Cmd</kbd>
+                                    <span>+</span>
+                                    <kbd>Q</kbd>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Toggle Developer Tools</label>
+                                </div>
+                                <div class="shortcut-keys" aria-label="Toggle Developer Tools hotkey">
+                                    <kbd>Ctrl</kbd>
+                                    <span>+</span>
+                                    <kbd>Shift</kbd>
+                                    <span>+</span>
+                                    <kbd>I</kbd>
+                                    <span class="shortcut-or">or</span>
+                                    <kbd>Alt</kbd>
+                                    <span>+</span>
+                                    <kbd>Cmd</kbd>
+                                    <span>+</span>
+                                    <kbd>I</kbd>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Reload</label>
+                                </div>
+                                <div class="shortcut-keys" aria-label="Reload hotkey">
+                                    <kbd>Ctrl</kbd>
+                                    <span>+</span>
+                                    <kbd>R</kbd>
+                                    <span class="shortcut-or">or</span>
+                                    <kbd>Cmd</kbd>
+                                    <span>+</span>
+                                    <kbd>R</kbd>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="settings-section">
+                            <h2>About</h2>
+                            <div class="settings-row">
+                                <span>This note taking app is vibe coded by Cy Porter of the podcast In20xx Sci Fi and Futurism. If you like emerging tech and speculative fiction check it out! in20xx.com</span>
                             </div>
                         </section>
                     </div>

@@ -26,7 +26,6 @@
     --surface-alt:   #fbfbfa;
     --row-h:         28px;
     --indent:        16px;
-    --topbar-h:      44px;
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
             Arial, "Noto Sans", sans-serif;
     --mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
@@ -85,20 +84,6 @@ body {
 }
 button { font-family: inherit; cursor: pointer; }
 
-/* ============================== TOP BAR ================================== */
-.topbar {
-    height: var(--topbar-h);
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    border-bottom: 1px solid var(--border);
-    background: var(--sidebar-bg);
-    gap: 16px;
-}
-.topbar-left { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.logo-icon { font-size: 22px; color: var(--accent); }
-.app-title { font-size: 15px; }
-
 .search-results {
     position: absolute; top: 34px; left: 0; right: 0; z-index: 50;
     list-style: none; margin: 0; padding: 4px;
@@ -111,8 +96,6 @@ button { font-family: inherit; cursor: pointer; }
 }
 .search-results li:hover { background: var(--sidebar-hover); }
 .search-results .empty { color: var(--text-muted); padding: 8px; }
-
-.topbar-right { display: flex; gap: 4px; }
 
 /* ============================== BUTTONS ================================== */
 .btn {
@@ -130,7 +113,7 @@ button { font-family: inherit; cursor: pointer; }
 /* ============================== LAYOUT =================================== */
 .layout {
     display: flex;
-    height: calc(100vh - var(--topbar-h));
+    height: 100vh;
 }
 .pane { display: flex; flex-direction: column; min-width: 0; }
 
@@ -468,6 +451,16 @@ button { font-family: inherit; cursor: pointer; }
     border-bottom: 1px solid var(--border);
 }
 .settings-row label { font-size: 14px; }
+.settings-row-stack { align-items: flex-start; }
+.settings-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.settings-help {
+    color: var(--text-muted);
+    font-size: 13px;
+}
 .theme-options { display: flex; gap: 8px; }
 .theme-option {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -492,10 +485,32 @@ button { font-family: inherit; cursor: pointer; }
     box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .theme-option.selected span:last-child { color: var(--text); }
+.shortcut-keys {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+.shortcut-keys kbd {
+    min-width: 28px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-alt);
+    color: var(--text);
+    font: inherit;
+    text-align: center;
+}
+.shortcut-or {
+    margin-left: 4px;
+}
 
 /* ============================== RESPONSIVE ============================== */
 @media (max-width: 700px) {
-    .pane-sidebar { position: absolute; z-index: 20; height: calc(100vh - var(--topbar-h)); box-shadow: 2px 0 8px rgba(0,0,0,.15); }
+    .pane-sidebar { position: absolute; z-index: 20; height: 100vh; box-shadow: 2px 0 8px rgba(0,0,0,.15); }
     .settings-page { flex-direction: column; }
     .settings-categories {
         width: auto;
@@ -505,4 +520,5 @@ button { font-family: inherit; cursor: pointer; }
     }
     .settings-content { padding: 18px; }
     .settings-row { align-items: flex-start; flex-direction: column; }
+    .shortcut-keys { justify-content: flex-start; }
 }

@@ -91,6 +91,7 @@ async function createWindow() {
         height: 820,
         minWidth: 720,
         minHeight: 480,
+        autoHideMenuBar: true,
         backgroundColor: '#fafafa',
         title: '',
         webPreferences: {
@@ -168,6 +169,7 @@ async function createWindow() {
         },
     ];
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+    win.setMenuBarVisibility(false);
 
     // open external links in the user's browser, not inside the app
     win.webContents.setWindowOpenHandler(({ url }) => {
