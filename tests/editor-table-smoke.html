@@ -64,10 +64,24 @@
         editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     }
 
+    function mouseEvent(type, x, y) {
+        return new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+        });
+    }
+
     function assertTableCommandsHidden(hidden) {
         ['table-row-below', 'table-col-right', 'table-row-delete', 'table-col-delete'].forEach(id => {
             assert(slash.querySelector(`[data-block="${id}"]`).hidden === hidden, `${id} hidden=${hidden}`);
         });
+    }
+
+    function assertTextBlock(block, message) {
+        assert(block.classList.contains('editor-text-block'), `${message} is marked as a text block`);
+        assert(getComputedStyle(block).cursor === 'grab', `${message} shows the grab hand`);
     }
 
     try {
@@ -147,6 +161,89 @@
         putSlashIn(editor.querySelectorAll('td')[1]);
         command('table-col-delete');
         assert(editor.querySelector('tr').cells.length === 2, 'column deleted');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        command('text');
+        assertTextBlock(editor.children[0], 'slash regular text');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        command('table');
+        assert(editor.children[0].tagName === 'TABLE', 'slash table inserts as a top-level block');
+        assertTextBlock(editor.children[0], 'slash table');
+
+        editor.innerHTML = 'Loose regular text<table><tbody><tr><td>1</td></tr></tbody></table>';
+        editor.dispatchEvent(mouseEvent('mousemove', 120, 24));
+        assert(editor.children[0].tagName === 'P', 'loose regular text normalizes to a paragraph block');
+        assertTextBlock(editor.children[0], 'regular text');
+        assertTextBlock(editor.children[1], 'table');
+
+        editor.innerHTML = [
+            '<p>Regular text</p>',
+            '<ul><li>Bullet</li></ul>',
+            '<ol><li>Number</li></ol>',
+            '<ul class="check-list"><li><input type="checkbox"> <span>Check</span></li></ul>',
+            '<table><tbody><tr><td>Cell</td></tr></tbody></table>',
+            '<pre><code>Code</code></pre>',
+            '<h2>Heading</h2>',
+            '<hr>',
+            '<section class="titled-note"><h2>Title</h2><p>Note</p></section>',
+        ].join('');
+        editor.dispatchEvent(mouseEvent('mousemove', 120, 24));
+        [...editor.children].forEach((block, index) => assertTextBlock(block, `requested block ${index + 1}`));
+
+        editor.innerHTML = '<p>First</p><h2>Second</h2><section class="titled-note"><h2>Third</h2><p><br></p></section>';
+        const first = editor.children[0];
+        first.dispatchEvent(mouseEvent('mousemove', 120, 24));
+        const handle = document.querySelector('.block-handle');
+        assert(handle && !handle.hidden, 'block handle appears on hover');
+        const last = editor.children[2];
+        const rect = last.getBoundingClientRect();
+        handle.dispatchEvent(mouseEvent('mousedown', 120, 24));
+        window.dispatchEvent(mouseEvent('mousemove', rect.left + 8, rect.bottom - 4));
+        assert(!document.querySelector('.editor-block-drop-line').hidden, 'drop line appears while dragging');
+        window.dispatchEvent(mouseEvent('mouseup', rect.left + 8, rect.bottom - 4));
+        assert(editor.children[2].tagName === 'P', 'dragged block moves after target block');
+        assert(editor.children[2].textContent.trim() === 'First', 'dragged block keeps content');
+        assert(document.querySelector('.editor-block-drop-line').hidden, 'drop line clears after drag');
+
+        editor.innerHTML = '<div>Alpha</div><table><tbody><tr><td>1</td></tr></tbody></table><div>Omega</div>';
+        const table = editor.querySelector('table');
+        const tableRect = table.getBoundingClientRect();
+        editor.dispatchEvent(mouseEvent('mousemove', tableRect.left + 8, tableRect.top + 8));
+        assert(editor.children[0].tagName === 'DIV', 'leading regular text remains a direct block');
+        assert(editor.children[1].tagName === 'TABLE', 'table stays a top-level block');
+        assert(editor.children[2].tagName === 'DIV', 'trailing regular text remains a direct block');
+        const tableHandle = document.querySelector('.block-handle');
+        assert(tableHandle && !tableHandle.hidden, 'table exposes a drag handle');
+        const textBlock = editor.children[0];
+        const textRect = textBlock.getBoundingClientRect();
+        tableHandle.dispatchEvent(mouseEvent('mousedown', 120, 24));
+        window.dispatchEvent(mouseEvent('mousemove', textRect.left + 8, textRect.top + 2));
+        window.dispatchEvent(mouseEvent('mouseup', textRect.left + 8, textRect.top + 2));
+        assert(editor.children[0].tagName === 'TABLE', 'table can be dragged before text blocks');
+
+        const normalizedText = editor.children[1];
+        const normalizedTextRect = normalizedText.getBoundingClientRect();
+        editor.dispatchEvent(mouseEvent('mousemove', normalizedTextRect.left + 8, normalizedTextRect.top + 2));
+        const textHandle = document.querySelector('.block-handle');
+        const trailingTextRect = editor.children[2].getBoundingClientRect();
+        textHandle.dispatchEvent(mouseEvent('mousedown', normalizedTextRect.left + 8, normalizedTextRect.top + 2));
+        window.dispatchEvent(mouseEvent('mousemove', trailingTextRect.left + 8, trailingTextRect.bottom - 2));
+        window.dispatchEvent(mouseEvent('mouseup', trailingTextRect.left + 8, trailingTextRect.bottom - 2));
+        assert(editor.children[2].tagName === 'DIV', 'regular text can be dragged as a block');
+        assert(editor.children[2].textContent.trim() === 'Alpha', 'dragged text block keeps its text');
+
+        editor.innerHTML = '<p>Direct</p><table><tbody><tr><td>1</td></tr></tbody></table><p>End</p>';
+        const directBlock = editor.children[0];
+        const directTarget = editor.children[2];
+        const directStartRect = directBlock.getBoundingClientRect();
+        const directTargetRect = directTarget.getBoundingClientRect();
+        directBlock.dispatchEvent(mouseEvent('mousedown', directStartRect.left + 8, directStartRect.top + 2));
+        window.dispatchEvent(mouseEvent('mousemove', directTargetRect.left + 8, directTargetRect.bottom - 2));
+        window.dispatchEvent(mouseEvent('mouseup', directTargetRect.left + 8, directTargetRect.bottom - 2));
+        assert(editor.children[2].textContent.trim() === 'Direct', 'regular text drags directly from the block');
 
         document.body.dataset.editorTableSmoke = 'pass';
     } catch (error) {

@@ -16,6 +16,8 @@ const Editor = (() => {
     const elSearchToolbar = document.getElementById('searchToolbar');
     const elSlash   = document.getElementById('slashMenu');
     const elCodeCopy = document.createElement('button');
+    const elBlockHandle = document.createElement('button');
+    const elBlockDropLine = document.createElement('div');
     const LAST_NOTE_KEY = 'lastNoteId';
 
     let currentNote = null;
@@ -24,6 +26,13 @@ const Editor = (() => {
     let slashRange = null;
     let slashIndex = 0;
     let hoveredCodeBlock = null;
+    let hoveredBlock = null;
+    let draggedBlock = null;
+    let pendingBlockDrag = null;
+    let blockDropTarget = null;
+    let blockDropIntent = 'before';
+    let blockHandleHideTimer = null;
+    const boundEditorBlocks = new WeakSet();
     let codeExitArmed = false;
     let codeExitBreak = null;
     const inlineFormatCommands = new Set(['bold', 'italic', 'underline']);
@@ -49,6 +58,15 @@ const Editor = (() => {
     elCodeCopy.innerHTML = '<i class="bx bx-copy"></i>';
     elCodeCopy.hidden = true;
     document.body.appendChild(elCodeCopy);
+    elBlockHandle.type = 'button';
+    elBlockHandle.className = 'block-handle';
+    elBlockHandle.title = 'Drag block';
+    elBlockHandle.innerHTML = '<i class="bx bx-dots-vertical-rounded"></i>';
+    elBlockHandle.hidden = true;
+    document.body.appendChild(elBlockHandle);
+    elBlockDropLine.className = 'editor-block-drop-line';
+    elBlockDropLine.hidden = true;
+    document.body.appendChild(elBlockDropLine);
 
     // ---- load a note into the panes ---------------------------------------
     async function load(noteId) {
@@ -69,8 +87,11 @@ const Editor = (() => {
         // text → WYSIWYG
         elRich.hidden = false;
         elRich.innerHTML = note.content || '';
+        ensureEditorBlocks();
         syncToolbarVisibility();
         hideSlashMenu();
+        hideBlockHandle();
+        hideBlockDropLine();
         suppressLoad = false;
     }
 
@@ -82,6 +103,8 @@ const Editor = (() => {
         elTitle.value = '';
         elIcon.className = 'bx bx-file';
         hideSlashMenu();
+        hideBlockHandle();
+        hideBlockDropLine();
     }
 
     // ---- autosave ----------------------------------------------------------
@@ -93,6 +116,7 @@ const Editor = (() => {
 
     async function saveNow() {
         if (!currentNote) return;
+        ensureEditorBlocks();
         const content = elRich.innerHTML;
         const title   = elTitle.value;
         if (content === currentNote.content &&
@@ -115,16 +139,26 @@ const Editor = (() => {
         scheduleSave();
         syncToolbarVisibility();
     });
-    elRich.addEventListener('mousemove', (e) => {
-        const pre = e.target.closest('pre');
+    elRich.addEventListener('mouseover', handleEditorPointer);
+    elRich.addEventListener('mousemove', handleEditorPointer);
+    function handleEditorPointer(e) {
+        updateHoveredBlock(e.target, e.clientX, e.clientY);
+        const target = e.target.nodeType === Node.ELEMENT_NODE ? e.target : e.target.parentElement;
+        const pre = target?.closest('pre');
         if (!pre || !elRich.contains(pre)) return hideCodeCopy();
         showCodeCopy(pre);
-    });
+    }
     elRich.addEventListener('mouseleave', (e) => {
+        if (!draggedBlock && !elBlockHandle.contains(e.relatedTarget)) scheduleBlockHandleHide();
         if (!elCodeCopy.contains(e.relatedTarget)) hideCodeCopy();
     });
-    elRich.addEventListener('mousedown', () => {
+    elRich.addEventListener('scroll', () => {
+        positionBlockHandle();
+        positionBlockDropLine();
+    });
+    elRich.addEventListener('mousedown', (e) => {
         disarmCodeExit();
+        prepareBlockDrag(e);
     });
     elRich.addEventListener('keyup', (e) => {
         syncToolbarVisibility();
@@ -216,6 +250,26 @@ const Editor = (() => {
         elCodeCopy.classList.add('copied');
         setTimeout(() => elCodeCopy.classList.remove('copied'), 900);
     });
+    elBlockHandle.addEventListener('mouseenter', () => {
+        cancelBlockHandleHide();
+        if (hoveredBlock) positionBlockHandle();
+    });
+    elBlockHandle.addEventListener('mouseleave', (e) => {
+        if (!draggedBlock && !elRich.contains(e.relatedTarget)) scheduleBlockHandleHide();
+    });
+    elBlockHandle.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 || !hoveredBlock || !hoveredBlock.isConnected) return;
+        e.preventDefault();
+        startBlockDrag(hoveredBlock, e.clientX, e.clientY);
+    });
+    document.addEventListener('mousemove', onDocumentPointerMove, true);
+    document.addEventListener('pointermove', onDocumentPointerMove, true);
+    window.addEventListener('mousemove', onBlockDragMove);
+    window.addEventListener('mouseup', onBlockDragEnd);
+    window.addEventListener('resize', () => {
+        positionBlockHandle();
+        positionBlockDropLine();
+    });
 
     // keyboard: Ctrl+S to force-save
     document.addEventListener('keydown', (e) => {
@@ -254,6 +308,8 @@ const Editor = (() => {
         elIcon.className = 'bx bx-cog';
         hideSlashMenu();
         hideCodeCopy();
+        hideBlockHandle();
+        hideBlockDropLine();
     }
 
     function selectionInEditor() {
@@ -349,6 +405,7 @@ const Editor = (() => {
             placeCaretAtSlashMarker();
         }
         hideSlashMenu();
+        ensureEditorBlocks();
         elRich.focus();
         scheduleSave();
     }
@@ -677,6 +734,258 @@ const Editor = (() => {
         textarea.select();
         document.execCommand('copy');
         textarea.remove();
+    }
+
+    function updateHoveredBlock(node, clientX, clientY) {
+        if (draggedBlock) return;
+        cancelBlockHandleHide();
+        ensureEditorBlocks();
+        const block = editorBlockFromPoint(clientX, clientY) || editorBlockForNode(node);
+        if (!block) return scheduleBlockHandleHide();
+        hoveredBlock = block;
+        positionBlockHandle();
+        elBlockHandle.hidden = false;
+    }
+
+    function onDocumentPointerMove(e) {
+        if (draggedBlock) return;
+        if (elBlockHandle.contains(e.target)) {
+            cancelBlockHandleHide();
+            return;
+        }
+        const block = editorBlockFromPoint(e.clientX, e.clientY);
+        if (block) {
+            hoveredBlock = block;
+            cancelBlockHandleHide();
+            positionBlockHandle();
+        } else if (!elRich.contains(e.target)) {
+            scheduleBlockHandleHide();
+        }
+    }
+
+    function bindEditorBlock(block) {
+        if (boundEditorBlocks.has(block)) return;
+        boundEditorBlocks.add(block);
+        block.addEventListener('mouseenter', showBlockHandleForEvent);
+        block.addEventListener('mousemove', showBlockHandleForEvent);
+    }
+
+    function showBlockHandleForEvent(e) {
+        updateHoveredBlock(e.currentTarget, e.clientX, e.clientY);
+    }
+
+    function prepareBlockDrag(e) {
+        if (e.button !== 0 || elBlockHandle.contains(e.target)) return;
+        const target = e.target.nodeType === Node.ELEMENT_NODE ? e.target : e.target.parentElement;
+        if (target?.closest?.('input, button, select, textarea')) return;
+        const block = editorBlockForNode(e.target) || editorBlockFromPoint(e.clientX, e.clientY);
+        pendingBlockDrag = block ? { block, x: e.clientX, y: e.clientY } : null;
+    }
+
+    function startBlockDrag(block, clientX, clientY) {
+        if (!block?.isConnected) return;
+        hideSlashMenu();
+        disarmCodeExit();
+        cancelBlockHandleHide();
+        pendingBlockDrag = null;
+        draggedBlock = block;
+        hoveredBlock = draggedBlock;
+        draggedBlock.classList.add('editor-block-dragging');
+        elBlockHandle.classList.add('dragging');
+        updateBlockDropFromPointer(clientX, clientY);
+    }
+
+    function editorBlockForNode(node) {
+        const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+        if (!element) return null;
+        let current = element;
+        while (current && current !== elRich) {
+            if (current.parentElement === elRich) return current;
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    function editorBlockFromPoint(clientX, clientY) {
+        const rectBlock = editorBlockByRect(clientX, clientY);
+        if (rectBlock) return rectBlock;
+
+        const hit = document.elementFromPoint(clientX, clientY);
+        const hitBlock = editorBlockForNode(hit);
+        if (hitBlock) return hitBlock;
+
+        const range = document.caretRangeFromPoint?.(clientX, clientY);
+        const rangeBlock = editorBlockForNode(range?.startContainer);
+        if (rangeBlock) return rangeBlock;
+
+        const position = document.caretPositionFromPoint?.(clientX, clientY);
+        const positionBlock = editorBlockForNode(position?.offsetNode);
+        if (positionBlock) return positionBlock;
+
+        return editorBlockByRect(clientX, clientY);
+    }
+
+    function editorBlockByRect(clientX, clientY) {
+        const editorRect = elRich.getBoundingClientRect();
+        if (clientX < editorRect.left || clientX > editorRect.right ||
+            clientY < editorRect.top || clientY > editorRect.bottom) return null;
+
+        return [...elRich.children].find(block => {
+            const rect = block.getBoundingClientRect();
+            return clientX >= rect.left && clientX <= rect.right &&
+                clientY >= rect.top && clientY <= rect.bottom;
+        }) || null;
+    }
+
+    function positionBlockHandle() {
+        if (!hoveredBlock || !hoveredBlock.isConnected || draggedBlock) return hideBlockHandle();
+        const rect = hoveredBlock.getBoundingClientRect();
+        const editorRect = elRich.getBoundingClientRect();
+        if (rect.bottom < editorRect.top || rect.top > editorRect.bottom) return hideBlockHandle();
+        elBlockHandle.style.left = `${Math.max(editorRect.left + 6, rect.left + 4)}px`;
+        elBlockHandle.style.top = `${rect.top + Math.max(0, Math.min(rect.height - 24, 4))}px`;
+        elBlockHandle.hidden = false;
+    }
+
+    function hideBlockHandle() {
+        cancelBlockHandleHide();
+        hoveredBlock = null;
+        elBlockHandle.hidden = true;
+    }
+
+    function scheduleBlockHandleHide() {
+        cancelBlockHandleHide();
+        blockHandleHideTimer = setTimeout(() => {
+            if (!draggedBlock) hideBlockHandle();
+        }, 180);
+    }
+
+    function cancelBlockHandleHide() {
+        clearTimeout(blockHandleHideTimer);
+        blockHandleHideTimer = null;
+    }
+
+    function nearestEditorBlock(clientY) {
+        ensureEditorBlocks();
+        const blocks = [...elRich.children];
+        if (!blocks.length) return null;
+        return blocks.reduce((closest, block) => {
+            if (block === draggedBlock) return closest;
+            const rect = block.getBoundingClientRect();
+            const distance = Math.abs((rect.top + rect.bottom) / 2 - clientY);
+            if (!closest || distance < closest.distance) return { block, distance };
+            return closest;
+        }, null)?.block || null;
+    }
+
+    function blockDropIntentFromPointer(clientY, target) {
+        const rect = target.getBoundingClientRect();
+        return clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    }
+
+    function showBlockDropLine(target, intent) {
+        const rect = target.getBoundingClientRect();
+        elBlockDropLine.style.left = `${rect.left}px`;
+        elBlockDropLine.style.top = `${intent === 'before' ? rect.top : rect.bottom}px`;
+        elBlockDropLine.style.width = `${rect.width}px`;
+        elBlockDropLine.hidden = false;
+    }
+
+    function positionBlockDropLine() {
+        if (!draggedBlock || !blockDropTarget?.isConnected) return hideBlockDropLine();
+        showBlockDropLine(blockDropTarget, blockDropIntent);
+    }
+
+    function hideBlockDropLine() {
+        blockDropTarget = null;
+        elBlockDropLine.hidden = true;
+    }
+
+    function moveDraggedBlock(target, intent) {
+        if (!draggedBlock || !target || draggedBlock === target) return cleanupBlockDrag();
+        if (intent === 'before') elRich.insertBefore(draggedBlock, target);
+        else elRich.insertBefore(draggedBlock, target.nextSibling);
+        scheduleSave();
+        cleanupBlockDrag();
+    }
+
+    function cleanupBlockDrag() {
+        draggedBlock?.classList.remove('editor-block-dragging');
+        draggedBlock = null;
+        pendingBlockDrag = null;
+        blockDropIntent = 'before';
+        elBlockHandle.classList.remove('dragging');
+        hideBlockDropLine();
+    }
+
+    function onBlockDragMove(e) {
+        if (pendingBlockDrag && !draggedBlock) {
+            const distance = Math.hypot(e.clientX - pendingBlockDrag.x, e.clientY - pendingBlockDrag.y);
+            if (distance < 5) return;
+            e.preventDefault();
+            startBlockDrag(pendingBlockDrag.block, e.clientX, e.clientY);
+        }
+        if (!draggedBlock) return;
+        e.preventDefault();
+        updateBlockDropFromPointer(e.clientX, e.clientY);
+    }
+
+    function onBlockDragEnd(e) {
+        if (pendingBlockDrag && !draggedBlock) {
+            pendingBlockDrag = null;
+            return;
+        }
+        if (!draggedBlock) return;
+        if (blockDropTarget && pointInEditorLane(e.clientX, e.clientY)) {
+            moveDraggedBlock(blockDropTarget, blockDropIntent);
+        } else {
+            cleanupBlockDrag();
+        }
+        positionBlockHandle();
+    }
+
+    function updateBlockDropFromPointer(clientX, clientY) {
+        if (!pointInEditorLane(clientX, clientY)) return hideBlockDropLine();
+        const target = nearestEditorBlock(clientY);
+        if (!target || target === draggedBlock) return hideBlockDropLine();
+        blockDropTarget = target;
+        blockDropIntent = blockDropIntentFromPointer(clientY, target);
+        showBlockDropLine(target, blockDropIntent);
+    }
+
+    function pointInEditorLane(clientX, clientY) {
+        const rect = elRich.getBoundingClientRect();
+        return clientX >= rect.left - 40 &&
+            clientX <= rect.right &&
+            clientY >= rect.top - 20 &&
+            clientY <= rect.bottom + 20;
+    }
+
+    function ensureEditorBlocks() {
+        const nodes = [...elRich.childNodes];
+        let paragraph = null;
+
+        nodes.forEach((node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                if (!node.textContent.trim()) {
+                    node.remove();
+                    return;
+                }
+                paragraph = paragraph || document.createElement('p');
+                node.before(paragraph);
+                paragraph.append(node);
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                paragraph = null;
+                return;
+            }
+            paragraph = null;
+        });
+        [...elRich.children].forEach(block => {
+            block.classList.add('editor-text-block');
+            bindEditorBlock(block);
+        });
     }
 
     return { load, clear, saveNow, showSettings, setTitleIfCurrent, setIconIfCurrent };
