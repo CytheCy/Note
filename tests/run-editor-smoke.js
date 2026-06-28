@@ -48,8 +48,7 @@ async function assertRealHoverHandle(win, selector, label) {
             const handleRect = handle.getBoundingClientRect();
             const blockRect = block.getBoundingClientRect();
             return {
-                ok: handleRect.left >= blockRect.left &&
-                handleRect.left <= blockRect.right &&
+                ok: handleRect.right <= blockRect.left &&
                 handleRect.top >= blockRect.top - 1 &&
                 handleRect.top <= blockRect.bottom,
                 hit: hit?.tagName || '',

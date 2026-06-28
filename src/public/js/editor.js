@@ -842,7 +842,7 @@ const Editor = (() => {
         const rect = hoveredBlock.getBoundingClientRect();
         const editorRect = elRich.getBoundingClientRect();
         if (rect.bottom < editorRect.top || rect.top > editorRect.bottom) return hideBlockHandle();
-        elBlockHandle.style.left = `${Math.max(editorRect.left + 6, rect.left + 4)}px`;
+        elBlockHandle.style.left = `${Math.max(8, rect.left - 32)}px`;
         elBlockHandle.style.top = `${rect.top + Math.max(0, Math.min(rect.height - 24, 4))}px`;
         elBlockHandle.hidden = false;
     }

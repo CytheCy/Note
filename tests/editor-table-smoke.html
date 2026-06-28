@@ -245,6 +245,17 @@
         window.dispatchEvent(mouseEvent('mouseup', directTargetRect.left + 8, directTargetRect.bottom - 2));
         assert(editor.children[2].textContent.trim() === 'Direct', 'regular text drags directly from the block');
 
+        editor.innerHTML = '<p>Before</p><h2>Heading</h2><p>After</p>';
+        const headingBlock = editor.children[1];
+        const headingRect = headingBlock.getBoundingClientRect();
+        const headingTargetRect = editor.children[2].getBoundingClientRect();
+        assert(getComputedStyle(headingBlock).cursor === 'grab', 'heading shows the grab hand');
+        headingBlock.dispatchEvent(mouseEvent('mousedown', headingRect.left + 8, headingRect.top + 2));
+        window.dispatchEvent(mouseEvent('mousemove', headingTargetRect.left + 8, headingTargetRect.bottom - 2));
+        window.dispatchEvent(mouseEvent('mouseup', headingTargetRect.left + 8, headingTargetRect.bottom - 2));
+        assert(editor.children[2].tagName === 'H2', 'heading drags like a text block');
+        assert(editor.children[2].textContent.trim() === 'Heading', 'dragged heading keeps its text');
+
         document.body.dataset.editorTableSmoke = 'pass';
     } catch (error) {
         document.body.dataset.editorTableSmoke = 'fail';

@@ -229,28 +229,10 @@ button { font-family: inherit; cursor: pointer; }
 }
 .rich-text-editor:focus { outline: none; }
 .rich-text-editor > * { position: relative; }
-.rich-text-editor > :hover {
-    background-image:
-        radial-gradient(circle, var(--text-muted) 2px, transparent 2px),
-        radial-gradient(circle, var(--text-muted) 2px, transparent 2px),
-        radial-gradient(circle, var(--text-muted) 2px, transparent 2px);
-    background-position: 15px 10px, 15px 16px, 15px 22px;
-    background-repeat: no-repeat;
-    background-size: 24px 24px;
-}
-.rich-text-editor > .editor-text-block,
-.rich-text-editor > .editor-text-block * { cursor: grab; }
-.rich-text-editor > .editor-text-block.editor-block-dragging,
-.rich-text-editor > .editor-text-block.editor-block-dragging * { cursor: grabbing; }
-.rich-text-editor > .editor-text-block:hover::before {
-    content: "\22EE";
-    position: absolute; z-index: 2; left: 4px; top: 4px;
-    width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
-    border: 1px solid var(--border); border-radius: 4px;
-    background: var(--surface); color: var(--text-muted);
-    box-shadow: 0 3px 12px rgba(0,0,0,.12);
-    pointer-events: none;
-}
+.rich-text-editor > *,
+.rich-text-editor > * * { cursor: grab; }
+.rich-text-editor > .editor-block-dragging,
+.rich-text-editor > .editor-block-dragging * { cursor: grabbing; }
 .rich-text-editor h1, .rich-text-editor h2 { margin-top: 1.2em; }
 .rich-text-editor blockquote {
     border-left: 3px solid var(--accent); padding-left: 12px; color: var(--text-muted); margin: 8px 0;
