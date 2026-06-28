@@ -64,6 +64,21 @@
         editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     }
 
+    function pressBackspace() {
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    }
+
+    function beforeInput(inputType, data = 'x') {
+        const event = new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType,
+            data,
+        });
+        editor.dispatchEvent(event);
+        return event.defaultPrevented;
+    }
+
     function mouseEvent(type, x, y) {
         return new MouseEvent(type, {
             bubbles: true,
@@ -111,6 +126,50 @@
         assert(editor.querySelector('h2'), 'heading inserted');
         assert(!editor.textContent.includes('Heading'), 'heading command does not insert placeholder text');
         assert(editor.querySelector('h2').contains(selectionContainer()), 'caret placed inside heading');
+
+        editor.innerHTML = '<p>/</p><p>After</p>';
+        putSlashIn(editor.querySelector('p'));
+        command('divider');
+        assert(editor.children[0].tagName === 'HR', 'divider inserts a divider block');
+        assert(editor.children[1].tagName === 'P', 'divider before content keeps following block directly after it');
+        assert(editor.children.length === 2, 'divider before content does not create an extra blank line');
+        assert(editor.children[1].textContent.trim() === 'After', 'divider keeps trailing content in place');
+        assert(editor.children[1].contains(selectionContainer()), 'caret moves into the following block after divider insertion');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        command('divider');
+        assert(editor.children[0].tagName === 'HR', 'divider at end inserts a divider block');
+        assert(editor.children[1].tagName === 'P', 'divider at end creates a text block below it');
+        assert(editor.children[1].contains(selectionContainer()), 'caret lands in the divider text block at the end');
+        assert(beforeInput('insertText', 'x'), 'typing in the divider text block is blocked');
+        assert(editor.children.length === 2, 'blocked typing does not create another block');
+        pressEnter();
+        assert(editor.children.length === 3, 'enter from the divider text block creates a new text block below it');
+        assert(editor.children[2].tagName === 'P', 'new text block lands below the divider placeholder');
+        assert(editor.children[2].contains(selectionContainer()), 'caret moves into the new text block below the divider');
+        editor.innerHTML = '<hr><p><br></p>';
+        placeCaretIn(editor.children[1]);
+        pressBackspace();
+        assert(editor.children.length === 1, 'backspace removes only the divider text block');
+        assert(editor.children[0].tagName === 'HR', 'backspace keeps the divider block');
+
+        editor.innerHTML = '<p>Above</p><hr><p>Below</p>';
+        {
+            const range = document.createRange();
+            range.setStart(editor, 2);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+        assert(beforeInput('insertText', 'x'), 'typing at divider boundary is blocked');
+        assert(editor.children.length === 3, 'typing at divider boundary does not create a new block');
+        pressEnter();
+        assert(editor.children.length === 4, 'enter at divider boundary creates a new text block');
+        assert(editor.children[2].tagName === 'P', 'enter inserts a paragraph below the divider');
+        assert(editor.children[3].tagName === 'P', 'existing following block stays after the new paragraph');
+        assert(editor.children[2].contains(selectionContainer()), 'caret moves into the new paragraph below the divider');
 
         editor.innerHTML = '<p>/</p>';
         putSlashIn(editor.querySelector('p'));
@@ -192,6 +251,32 @@
         ].join('');
         editor.dispatchEvent(mouseEvent('mousemove', 120, 24));
         [...editor.children].forEach((block, index) => assertTextBlock(block, `requested block ${index + 1}`));
+
+        editor.innerHTML = '<p>Above</p><hr><p>Below</p>';
+        const divider = editor.querySelector('hr');
+        const dividerRect = divider.getBoundingClientRect();
+        editor.dispatchEvent(mouseEvent('mousemove', dividerRect.left + 16, dividerRect.top - 6));
+        const dividerHandle = document.querySelector('.block-handle');
+        assert(dividerHandle && !dividerHandle.hidden, 'divider handle appears from a near-divider hover');
+        const dividerHandleRect = dividerHandle.getBoundingClientRect();
+        assert(dividerHandleRect.top < dividerRect.top, 'divider handle sits above the divider line');
+
+        editor.innerHTML = '<p>Drag</p><p>Above</p><hr><p>Below</p><p>After</p>';
+        const dragSource = editor.children[0];
+        dragSource.dispatchEvent(mouseEvent('mousemove', 120, 24));
+        const dividerDragHandle = document.querySelector('.block-handle');
+        const dropLine = document.querySelector('.editor-block-drop-line');
+        const dividerDropRect = editor.querySelector('hr').getBoundingClientRect();
+        dividerDragHandle.dispatchEvent(mouseEvent('mousedown', 120, 24));
+        window.dispatchEvent(mouseEvent('mousemove', dividerDropRect.left + 8, dividerDropRect.top - 3));
+        const gapAboveTop = dropLine.getBoundingClientRect().top;
+        window.dispatchEvent(mouseEvent('mousemove', dividerDropRect.left + 8, dividerDropRect.top + 8));
+        assert(Math.abs(dropLine.getBoundingClientRect().top - gapAboveTop) < 1, 'space above divider maps to one drop slot');
+        window.dispatchEvent(mouseEvent('mousemove', dividerDropRect.left + 8, dividerDropRect.bottom + 3));
+        const gapBelowTop = dropLine.getBoundingClientRect().top;
+        window.dispatchEvent(mouseEvent('mousemove', dividerDropRect.left + 8, dividerDropRect.bottom + 14));
+        assert(Math.abs(dropLine.getBoundingClientRect().top - gapBelowTop) < 1, 'space below divider maps to one drop slot');
+        window.dispatchEvent(mouseEvent('mouseup', dividerDropRect.left + 8, dividerDropRect.bottom + 14));
 
         editor.innerHTML = '<p>First</p><h2>Second</h2><section class="titled-note"><h2>Third</h2><p><br></p></section>';
         const first = editor.children[0];

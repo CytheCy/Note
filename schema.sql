@@ -1,6 +1,6 @@
 -- ============================================================================
---  Trilium-Style Notes — SQLite schema
---  Mirrors Trilium's relational model:
+--  Note — SQLite schema
+--  Mirrors the app's relational model:
 --   * notes          → content & metadata (one logical note = one row)
 --   * note_relations → the TREE (many-to-many: enables CLONING — one note
 --                      can live under multiple parents)
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS notes (
     dateCreated   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     dateModified  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     isProtected   INTEGER NOT NULL DEFAULT 0,         -- placeholder for future E2EE
-    isDeleted     INTEGER NOT NULL DEFAULT 0          -- soft delete (Trilium-style)
+    isDeleted     INTEGER NOT NULL DEFAULT 0          -- soft delete
 );
 
 -- Indexes that back the global search box (title/content LIKE).
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS note_relations (
     noteId        TEXT    REFERENCES notes(noteId) ON DELETE CASCADE,
     sortOrder     REAL    NOT NULL DEFAULT 0,       -- REAL so inserts can go between
     isExpanded    INTEGER NOT NULL DEFAULT 0,        -- UI expansion state per clone
-    prefix        TEXT    DEFAULT NULL,             -- Trilium: per-clone title prefix
+    prefix        TEXT    DEFAULT NULL,             -- per-clone title prefix
     isDeleted     INTEGER NOT NULL DEFAULT 0
 );
 
@@ -61,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_rel_note            ON note_relations (noteId);
 
 -- ---------------------------------------------------------------------------
 --  Root note
---  Trilium has a single invisible root ("root"); "none" is the top-level container.
+--  The app has a single invisible root ("root"); "none" is the top-level container.
 --  We mirror that: a 'root' note + a user-visible 'root' (the document root).
 -- ---------------------------------------------------------------------------
 INSERT OR IGNORE INTO notes (noteId, title, content, type)

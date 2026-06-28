@@ -1,8 +1,8 @@
-# Trilium-Style Notes
+# Note
 
-A hierarchical note-taking desktop application inspired by [Trilium Notes](https://github.com/zadam/trilium).
-It features a deeply-nestable notes tree, **note cloning** (a single note can appear in multiple
-places in the tree), and the **Boxicons** icon ecosystem that Trilium uses.
+A hierarchical note-taking desktop application.
+It features a deeply nestable notes tree, **note cloning** (a single note can appear in multiple
+places in the tree), and **Boxicons** for note icons.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ Then open <http://localhost:3777> in your browser.
 npm run electron
 ```
 
-## Trilium concepts implemented
+## Concepts implemented
 
 - **Nested tree** — unlimited depth, lazy-expandable, indentation padding per level.
 - **Cloning** — `note_relations` is a many-to-many bridge, so one `notes` row can have many

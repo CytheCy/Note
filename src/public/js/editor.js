@@ -49,7 +49,7 @@ const Editor = (() => {
         ['table-col-delete', 'bx bx-trash', 'Delete table column', deleteTableColumn],
         ['code', 'bx bx-code-alt', 'Code block', '<pre><code><span data-slash-caret></span><br></code></pre><p><br></p>'],
         ['heading', 'bx bx-heading', 'Heading', '<h2><span data-slash-caret></span><br></h2><p><br></p>'],
-        ['divider', 'bx bx-minus', 'Divider', '<hr><p><br></p>'],
+        ['divider', 'bx bx-minus', 'Divider', '<hr><p><span data-slash-caret></span><br></p>'],
         ['titled', 'bx bx-note', 'Titled Note', '<section class="titled-note"><h2><span data-slash-caret></span><br></h2><p><br></p></section><p><br></p>'],
     ];
     elCodeCopy.type = 'button';
@@ -139,6 +139,10 @@ const Editor = (() => {
         scheduleSave();
         syncToolbarVisibility();
     });
+    elRich.addEventListener('beforeinput', (e) => {
+        if (!blocksDividerBoundaryInput(e) && !blocksDividerTextBlockInput(e)) return;
+        e.preventDefault();
+    });
     elRich.addEventListener('mouseover', handleEditorPointer);
     elRich.addEventListener('mousemove', handleEditorPointer);
     function handleEditorPointer(e) {
@@ -182,6 +186,16 @@ const Editor = (() => {
             }
             return;
         }
+        if (e.key === 'Enter' && handleDividerBoundaryEnter()) {
+            e.preventDefault();
+            scheduleSave();
+        } else if (e.key === 'Enter' && handleDividerTextBlockEnter()) {
+            e.preventDefault();
+            scheduleSave();
+        } else if (e.key === 'Backspace' && handleDividerTextBlockBackspace()) {
+            e.preventDefault();
+            scheduleSave();
+        } else
         if (e.key === 'Enter' && handleTitledNoteTitleEnter()) {
             e.preventDefault();
             scheduleSave();
@@ -583,6 +597,66 @@ const Editor = (() => {
         return node?.tagName === 'P' && node.textContent.trim() === '';
     }
 
+    function currentDividerBoundary() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.isCollapsed || !elRich.contains(sel.anchorNode)) return null;
+        if (sel.anchorNode !== elRich) return null;
+        const divider = elRich.childNodes[sel.anchorOffset - 1];
+        return divider?.tagName === 'HR' ? divider : null;
+    }
+
+    function currentDividerTextBlock() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
+        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
+        const paragraph = node?.closest?.('p');
+        if (!paragraph || !elRich.contains(paragraph) || paragraph.previousElementSibling?.tagName !== 'HR') return null;
+        return paragraph;
+    }
+
+    function handleDividerTextBlockBackspace() {
+        const paragraph = currentDividerTextBlock();
+        if (!paragraph || !isEmptyParagraph(paragraph) || !caretAtStartOf(paragraph)) return false;
+        const divider = paragraph.previousElementSibling;
+        const next = paragraph.nextElementSibling;
+        paragraph.remove();
+        if (next) placeCaretIn(next);
+        else placeCaretAfter(divider);
+        return true;
+    }
+
+    function handleDividerBoundaryEnter() {
+        const divider = currentDividerBoundary();
+        if (!divider) return false;
+        const paragraph = document.createElement('p');
+        paragraph.innerHTML = '<br>';
+        divider.after(paragraph);
+        placeCaretIn(paragraph);
+        return true;
+    }
+
+    function blocksDividerBoundaryInput(e) {
+        const divider = currentDividerBoundary();
+        if (!divider) return false;
+        return e.inputType?.startsWith('insert') && e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak';
+    }
+
+    function handleDividerTextBlockEnter() {
+        const paragraph = currentDividerTextBlock();
+        if (!paragraph || !isEmptyParagraph(paragraph)) return false;
+        const next = document.createElement('p');
+        next.innerHTML = '<br>';
+        paragraph.after(next);
+        placeCaretIn(next);
+        return true;
+    }
+
+    function blocksDividerTextBlockInput(e) {
+        const paragraph = currentDividerTextBlock();
+        if (!paragraph || !isEmptyParagraph(paragraph)) return false;
+        return e.inputType?.startsWith('insert') && e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak';
+    }
+
     function trimTrailingCodeBreaks(code) {
         while (code.textContent && code.lastChild?.tagName === 'BR') code.lastChild.remove();
     }
@@ -705,6 +779,17 @@ const Editor = (() => {
         sel.removeAllRanges();
         sel.addRange(range);
         elRich.focus();
+    }
+
+    function caretAtStartOf(node) {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return false;
+        const range = sel.getRangeAt(0);
+        if (!range.collapsed) return false;
+        const start = document.createRange();
+        start.selectNodeContents(node);
+        start.collapse(true);
+        return range.compareBoundaryPoints(Range.START_TO_START, start) === 0;
     }
 
     function showCodeCopy(pre) {
@@ -831,10 +916,21 @@ const Editor = (() => {
             clientY < editorRect.top || clientY > editorRect.bottom) return null;
 
         return [...elRich.children].find(block => {
-            const rect = block.getBoundingClientRect();
+            const rect = blockHitRect(block);
             return clientX >= rect.left && clientX <= rect.right &&
                 clientY >= rect.top && clientY <= rect.bottom;
         }) || null;
+    }
+
+    function blockHitRect(block) {
+        const rect = block.getBoundingClientRect();
+        if (block.tagName !== 'HR') return rect;
+        return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top - 10,
+            bottom: rect.bottom + 10,
+        };
     }
 
     function positionBlockHandle() {
@@ -843,8 +939,13 @@ const Editor = (() => {
         const editorRect = elRich.getBoundingClientRect();
         if (rect.bottom < editorRect.top || rect.top > editorRect.bottom) return hideBlockHandle();
         elBlockHandle.style.left = `${Math.max(8, rect.left - 32)}px`;
-        elBlockHandle.style.top = `${rect.top + Math.max(0, Math.min(rect.height - 24, 4))}px`;
+        elBlockHandle.style.top = `${blockHandleTop(hoveredBlock, rect)}px`;
         elBlockHandle.hidden = false;
+    }
+
+    function blockHandleTop(block, rect) {
+        if (block.tagName === 'HR') return rect.top - 7;
+        return rect.top + Math.max(0, Math.min(rect.height - 24, 4));
     }
 
     function hideBlockHandle() {
@@ -878,11 +979,6 @@ const Editor = (() => {
         }, null)?.block || null;
     }
 
-    function blockDropIntentFromPointer(clientY, target) {
-        const rect = target.getBoundingClientRect();
-        return clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-    }
-
     function showBlockDropLine(target, intent) {
         const rect = target.getBoundingClientRect();
         elBlockDropLine.style.left = `${rect.left}px`;
@@ -891,9 +987,18 @@ const Editor = (() => {
         elBlockDropLine.hidden = false;
     }
 
+    function showBlockDropSlot(slot) {
+        elBlockDropLine.style.left = `${slot.left}px`;
+        elBlockDropLine.style.top = `${slot.top}px`;
+        elBlockDropLine.style.width = `${slot.width}px`;
+        elBlockDropLine.hidden = false;
+    }
+
     function positionBlockDropLine() {
         if (!draggedBlock || !blockDropTarget?.isConnected) return hideBlockDropLine();
-        showBlockDropLine(blockDropTarget, blockDropIntent);
+        const slot = currentDropSlot(blockDropTarget, blockDropIntent);
+        if (!slot) return hideBlockDropLine();
+        showBlockDropSlot(slot);
     }
 
     function hideBlockDropLine() {
@@ -946,11 +1051,11 @@ const Editor = (() => {
 
     function updateBlockDropFromPointer(clientX, clientY) {
         if (!pointInEditorLane(clientX, clientY)) return hideBlockDropLine();
-        const target = nearestEditorBlock(clientY);
-        if (!target || target === draggedBlock) return hideBlockDropLine();
-        blockDropTarget = target;
-        blockDropIntent = blockDropIntentFromPointer(clientY, target);
-        showBlockDropLine(target, blockDropIntent);
+        const slot = nearestDropSlot(clientY);
+        if (!slot || slot.target === draggedBlock) return hideBlockDropLine();
+        blockDropTarget = slot.target;
+        blockDropIntent = slot.intent;
+        showBlockDropSlot(slot);
     }
 
     function pointInEditorLane(clientX, clientY) {
@@ -959,6 +1064,52 @@ const Editor = (() => {
             clientX <= rect.right &&
             clientY >= rect.top - 20 &&
             clientY <= rect.bottom + 20;
+    }
+
+    function nearestDropSlot(clientY) {
+        ensureEditorBlocks();
+        const blocks = draggableBlocks();
+        if (!blocks.length) return null;
+        const slots = dropSlots(blocks);
+        return slots.reduce((closest, slot) => {
+            const distance = Math.abs(slot.top - clientY);
+            if (!closest || distance < closest.distance) return { ...slot, distance };
+            return closest;
+        }, null);
+    }
+
+    function draggableBlocks() {
+        return [...elRich.children].filter(block => block !== draggedBlock);
+    }
+
+    function dropSlots(blocks) {
+        const slots = [dropEdgeSlot(blocks[0], 'before')];
+        for (let i = 0; i < blocks.length - 1; i += 1) {
+            slots.push(dropGapSlot(blocks[i], blocks[i + 1]));
+        }
+        slots.push(dropEdgeSlot(blocks.at(-1), 'after'));
+        return slots;
+    }
+
+    function currentDropSlot(target, intent) {
+        return dropSlots(draggableBlocks()).find(slot => slot.target === target && slot.intent === intent) || null;
+    }
+
+    function dropEdgeSlot(target, intent) {
+        const rect = target.getBoundingClientRect();
+        return { target, intent, left: rect.left, top: intent === 'before' ? rect.top : rect.bottom, width: rect.width };
+    }
+
+    function dropGapSlot(previous, target) {
+        const prevRect = previous.getBoundingClientRect();
+        const rect = target.getBoundingClientRect();
+        return {
+            target,
+            intent: 'before',
+            left: Math.min(prevRect.left, rect.left),
+            top: (prevRect.bottom + rect.top) / 2,
+            width: Math.max(prevRect.right, rect.right) - Math.min(prevRect.left, rect.left),
+        };
     }
 
     function ensureEditorBlocks() {
@@ -982,9 +1133,22 @@ const Editor = (() => {
             }
             paragraph = null;
         });
+        normalizeDividerBlocks();
         [...elRich.children].forEach(block => {
             block.classList.add('editor-text-block');
             bindEditorBlock(block);
+        });
+    }
+
+    function normalizeDividerBlocks() {
+        const currentParagraph = currentDividerTextBlock();
+        [...elRich.querySelectorAll('hr')].forEach((divider) => {
+            const paragraph = divider.nextElementSibling;
+            if (!isEmptyParagraph(paragraph) || !paragraph.nextElementSibling) return;
+            const shouldMoveCaret = paragraph === currentParagraph;
+            const next = paragraph.nextElementSibling;
+            paragraph.remove();
+            if (shouldMoveCaret) placeCaretIn(next);
         });
     }
 

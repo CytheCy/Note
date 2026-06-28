@@ -160,7 +160,7 @@ async function createWindow() {
                         dialog.showMessageBox(win, {
                             type: 'info',
                             title: 'About',
-                            message: 'Trilium-Style Notes',
+                            message: 'Note',
                             detail: 'A hierarchical note-taking desktop app.',
                         });
                     },

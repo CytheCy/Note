@@ -127,6 +127,6 @@ app.get('*', (req, res, next) => {
 
 const PORT = process.env.PORT || 3777;
 app.listen(PORT, () => {
-    console.log(`[Trilium-Style Notes] serving on http://localhost:${PORT}`);
+    console.log(`[Note] serving on http://localhost:${PORT}`);
     console.log(`  DB: ${path.join(__dirname, '..', 'data', 'document.db')}`);
 });

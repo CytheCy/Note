@@ -1,5 +1,5 @@
 /**
- * db.js — SQLite data layer for Trilium-Style Notes.
+ * db.js — SQLite data layer for Note.
  *
  * Responsibilities:
  *   - open / migrate the database
@@ -8,7 +8,7 @@
  *   - recursive hierarchy fetch (children of a parent, ordered, with clone counts)
  *   - small CLI:  `node src/db.js --init | --seed | --status`
  *
- * Design notes (Trilium-faithful):
+ * Design notes:
  *   - The "tree" is the note_relations table. One note may have many parents
  *     (cloning) — each parent/child pair is its own row with its own sortOrder.
  *   - Everything is soft-deleted (isDeleted flag) so undo/restore is possible.

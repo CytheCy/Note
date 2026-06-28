@@ -15,7 +15,7 @@ const TreeView = (() => {
     const elCtx  = document.getElementById('ctxMenu');
     const elIconPicker = document.getElementById('iconPicker');
 
-    // ---- Trilium-style icon mapping ----------------------------------------
+    // ---- icon mapping ------------------------------------------------------
     // Default icon + per-type override + folder icon for parents.
     const NOTE_TYPE_ICON = {
         text:   'bx bx-file',
@@ -44,7 +44,7 @@ const TreeView = (() => {
 
     // ---- helpers -----------------------------------------------------------
     function isFolder(node) {
-        // A node is "folder-like" if it has children (Trilium shows the
+        // A node is "folder-like" if it has children (the UI shows the
         // folder icon for any note with children).
         return node.childCount > 0 || (node.children && node.children.length > 0);
     }
@@ -473,7 +473,7 @@ const TreeView = (() => {
                     triggerRename(rowEl, node);
                     break;
                 case 'clone': {
-                    // Clone under root for simplicity; Trilium has a picker.
+                    // Clone under root for simplicity; a picker can be added later.
                     await Api.clone({ noteId: node.noteId, newParentId: 'root' });
                     await TreeView.reload();
                     break;
