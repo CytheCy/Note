@@ -32,6 +32,7 @@ const Editor = (() => {
     let blockDropTarget = null;
     let blockDropIntent = 'before';
     let blockHandleHideTimer = null;
+    let selectedDividerBlock = null;
     const boundEditorBlocks = new WeakSet();
     let codeExitArmed = false;
     let codeExitBreak = null;
@@ -49,7 +50,7 @@ const Editor = (() => {
         ['table-col-delete', 'bx bx-trash', 'Delete table column', deleteTableColumn],
         ['code', 'bx bx-code-alt', 'Code block', '<pre><code><span data-slash-caret></span><br></code></pre><p><br></p>'],
         ['heading', 'bx bx-heading', 'Heading', '<h2><span data-slash-caret></span><br></h2><p><br></p>'],
-        ['divider', 'bx bx-minus', 'Divider', '<hr><p><span data-slash-caret></span><br></p>'],
+        ['divider', 'bx bx-minus', 'Divider', insertDividerBlock],
         ['titled', 'bx bx-note', 'Titled Note', '<section class="titled-note"><h2><span data-slash-caret></span><br></h2><p><br></p></section><p><br></p>'],
     ];
     elCodeCopy.type = 'button';
@@ -67,7 +68,6 @@ const Editor = (() => {
     elBlockDropLine.className = 'editor-block-drop-line';
     elBlockDropLine.hidden = true;
     document.body.appendChild(elBlockDropLine);
-
     // ---- load a note into the panes ---------------------------------------
     async function load(noteId) {
         if (!noteId) return clear();
@@ -92,6 +92,7 @@ const Editor = (() => {
         hideSlashMenu();
         hideBlockHandle();
         hideBlockDropLine();
+        hideDividerSelection();
         suppressLoad = false;
     }
 
@@ -105,6 +106,7 @@ const Editor = (() => {
         hideSlashMenu();
         hideBlockHandle();
         hideBlockDropLine();
+        hideDividerSelection();
     }
 
     // ---- autosave ----------------------------------------------------------
@@ -138,10 +140,12 @@ const Editor = (() => {
     elRich.addEventListener('input', () => {
         scheduleSave();
         syncToolbarVisibility();
+        syncDividerSelection();
     });
     elRich.addEventListener('beforeinput', (e) => {
-        if (!blocksDividerBoundaryInput(e) && !blocksDividerTextBlockInput(e)) return;
+        if (!blocksDividerBoundaryInput(e)) return;
         e.preventDefault();
+        syncDividerSelection();
     });
     elRich.addEventListener('mouseover', handleEditorPointer);
     elRich.addEventListener('mousemove', handleEditorPointer);
@@ -189,10 +193,7 @@ const Editor = (() => {
         if (e.key === 'Enter' && handleDividerBoundaryEnter()) {
             e.preventDefault();
             scheduleSave();
-        } else if (e.key === 'Enter' && handleDividerTextBlockEnter()) {
-            e.preventDefault();
-            scheduleSave();
-        } else if (e.key === 'Backspace' && handleDividerTextBlockBackspace()) {
+        } else if ((e.key === 'Backspace' || e.key === 'Delete') && handleDividerDelete()) {
             e.preventDefault();
             scheduleSave();
         } else
@@ -253,6 +254,7 @@ const Editor = (() => {
         if (!elSlash.hidden && !elSlash.contains(e.target)) hideSlashMenu();
     });
     document.addEventListener('selectionchange', syncToolbarVisibility);
+    document.addEventListener('selectionchange', syncDividerSelection);
 
     elCodeCopy.addEventListener('mouseleave', (e) => {
         if (!hoveredCodeBlock || !hoveredCodeBlock.contains(e.relatedTarget)) hideCodeCopy();
@@ -324,6 +326,7 @@ const Editor = (() => {
         hideCodeCopy();
         hideBlockHandle();
         hideBlockDropLine();
+        hideDividerSelection();
     }
 
     function selectionInEditor() {
@@ -439,6 +442,32 @@ const Editor = (() => {
         sel.removeAllRanges();
         sel.addRange(rangeWithSlashSelected());
         document.execCommand('delete', false, null);
+    }
+
+    function insertDividerBlock() {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(rangeWithSlashSelected());
+        const block = editorBlockForNode(sel.anchorNode);
+        document.execCommand('delete', false, null);
+
+        const divider = createDividerBlock();
+        if (isEmptyParagraph(block)) {
+            block.replaceWith(divider);
+        } else {
+            sel.getRangeAt(0).insertNode(divider);
+        }
+        placeCaretAfter(divider);
+        showDividerSelection(divider);
+        return true;
+    }
+
+    function createDividerBlock() {
+        const block = document.createElement('div');
+        block.className = 'editor-divider-block';
+        block.contentEditable = 'false';
+        block.append(document.createElement('hr'));
+        return block;
     }
 
     function placeCaretAtSlashMarker() {
@@ -597,32 +626,16 @@ const Editor = (() => {
         return node?.tagName === 'P' && node.textContent.trim() === '';
     }
 
+    function isDividerBlock(node) {
+        return node?.nodeType === Node.ELEMENT_NODE && node.classList.contains('editor-divider-block');
+    }
+
     function currentDividerBoundary() {
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount || !sel.isCollapsed || !elRich.contains(sel.anchorNode)) return null;
         if (sel.anchorNode !== elRich) return null;
         const divider = elRich.childNodes[sel.anchorOffset - 1];
-        return divider?.tagName === 'HR' ? divider : null;
-    }
-
-    function currentDividerTextBlock() {
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
-        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
-        const paragraph = node?.closest?.('p');
-        if (!paragraph || !elRich.contains(paragraph) || paragraph.previousElementSibling?.tagName !== 'HR') return null;
-        return paragraph;
-    }
-
-    function handleDividerTextBlockBackspace() {
-        const paragraph = currentDividerTextBlock();
-        if (!paragraph || !isEmptyParagraph(paragraph) || !caretAtStartOf(paragraph)) return false;
-        const divider = paragraph.previousElementSibling;
-        const next = paragraph.nextElementSibling;
-        paragraph.remove();
-        if (next) placeCaretIn(next);
-        else placeCaretAfter(divider);
-        return true;
+        return isDividerBlock(divider) ? divider : null;
     }
 
     function handleDividerBoundaryEnter() {
@@ -632,6 +645,7 @@ const Editor = (() => {
         paragraph.innerHTML = '<br>';
         divider.after(paragraph);
         placeCaretIn(paragraph);
+        hideDividerSelection();
         return true;
     }
 
@@ -641,20 +655,14 @@ const Editor = (() => {
         return e.inputType?.startsWith('insert') && e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak';
     }
 
-    function handleDividerTextBlockEnter() {
-        const paragraph = currentDividerTextBlock();
-        if (!paragraph || !isEmptyParagraph(paragraph)) return false;
-        const next = document.createElement('p');
-        next.innerHTML = '<br>';
-        paragraph.after(next);
-        placeCaretIn(next);
+    function handleDividerDelete() {
+        const divider = currentDividerBoundary();
+        if (!divider) return false;
+        const target = divider.nextElementSibling || divider.previousElementSibling;
+        divider.remove();
+        hideDividerSelection();
+        if (target) placeCaretIn(target);
         return true;
-    }
-
-    function blocksDividerTextBlockInput(e) {
-        const paragraph = currentDividerTextBlock();
-        if (!paragraph || !isEmptyParagraph(paragraph)) return false;
-        return e.inputType?.startsWith('insert') && e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak';
     }
 
     function trimTrailingCodeBreaks(code) {
@@ -762,23 +770,42 @@ const Editor = (() => {
     }
 
     function placeCaretIn(node) {
+        elRich.focus();
         const range = document.createRange();
         range.selectNodeContents(node);
         range.collapse(true);
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
-        elRich.focus();
     }
 
     function placeCaretAfter(node) {
+        elRich.focus();
         const range = document.createRange();
         range.setStartAfter(node);
         range.collapse(true);
         const sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
-        elRich.focus();
+    }
+
+    function syncDividerSelection() {
+        const divider = currentDividerBoundary();
+        if (divider) showDividerSelection(divider);
+        else hideDividerSelection();
+    }
+
+    function showDividerSelection(divider) {
+        if (selectedDividerBlock !== divider) hideDividerSelection();
+        selectedDividerBlock = divider;
+        divider.classList.add('selected');
+        elRich.classList.add('divider-selected-active');
+    }
+
+    function hideDividerSelection() {
+        selectedDividerBlock?.classList.remove('selected');
+        selectedDividerBlock = null;
+        elRich.classList.remove('divider-selected-active');
     }
 
     function caretAtStartOf(node) {
@@ -851,8 +878,16 @@ const Editor = (() => {
     function bindEditorBlock(block) {
         if (boundEditorBlocks.has(block)) return;
         boundEditorBlocks.add(block);
+        if (isDividerBlock(block)) block.addEventListener('mousedown', focusDividerBoundaryFromClick);
         block.addEventListener('mouseenter', showBlockHandleForEvent);
         block.addEventListener('mousemove', showBlockHandleForEvent);
+    }
+
+    function focusDividerBoundaryFromClick(e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        placeCaretAfter(e.currentTarget);
+        showDividerSelection(e.currentTarget);
     }
 
     function showBlockHandleForEvent(e) {
@@ -924,7 +959,7 @@ const Editor = (() => {
 
     function blockHitRect(block) {
         const rect = block.getBoundingClientRect();
-        if (block.tagName !== 'HR') return rect;
+        if (!isDividerBlock(block)) return rect;
         return {
             left: rect.left,
             right: rect.right,
@@ -944,7 +979,7 @@ const Editor = (() => {
     }
 
     function blockHandleTop(block, rect) {
-        if (block.tagName === 'HR') return rect.top - 7;
+        if (isDividerBlock(block)) return rect.top - 7;
         return rect.top + Math.max(0, Math.min(rect.height - 24, 4));
     }
 
@@ -1141,15 +1176,21 @@ const Editor = (() => {
     }
 
     function normalizeDividerBlocks() {
-        const currentParagraph = currentDividerTextBlock();
-        [...elRich.querySelectorAll('hr')].forEach((divider) => {
-            const paragraph = divider.nextElementSibling;
-            if (!isEmptyParagraph(paragraph) || !paragraph.nextElementSibling) return;
-            const shouldMoveCaret = paragraph === currentParagraph;
-            const next = paragraph.nextElementSibling;
-            paragraph.remove();
-            if (shouldMoveCaret) placeCaretIn(next);
+        const sel = window.getSelection();
+        [...elRich.children].forEach((block) => {
+            if (block.tagName !== 'HR') return;
+            const divider = createDividerBlock();
+            block.replaceWith(divider);
         });
+        [...elRich.children].filter(isDividerBlock).forEach((divider) => {
+            divider.contentEditable = 'false';
+            const paragraph = divider.nextElementSibling;
+            if (!isEmptyParagraph(paragraph)) return;
+            const shouldMoveCaret = sel?.anchorNode && paragraph.contains(sel.anchorNode);
+            paragraph.remove();
+            if (shouldMoveCaret) placeCaretAfter(divider);
+        });
+        syncDividerSelection();
     }
 
     return { load, clear, saveNow, showSettings, setTitleIfCurrent, setIconIfCurrent };
