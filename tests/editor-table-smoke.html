@@ -29,6 +29,25 @@
         assert(!slash.hidden, 'slash menu opened');
     }
 
+    function typeSlashQuery(cell, query) {
+        for (const char of query) {
+            const handled = beforeInput('insertText', char);
+            if (!handled) {
+                const text = cell.firstChild || cell.appendChild(document.createTextNode(''));
+                text.data += char;
+                const range = document.createRange();
+                range.setStart(text, text.data.length);
+                range.collapse(true);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: char }));
+            }
+            editor.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
+            if (handled) return;
+        }
+    }
+
     function command(id) {
         const button = slash.querySelector(`[data-block="${id}"]`);
         assert(button, `${id} exists`);
@@ -100,14 +119,9 @@
     }
 
     try {
-        editor.innerHTML = '<p>/</p>';
-        putSlashIn(editor.querySelector('p'));
-        assertTableCommandsHidden(true);
-        command('code');
+        editor.innerHTML = '<pre><code>one</code></pre><p><br></p>';
         const code = editor.querySelector('pre code');
-        assert(code, 'code block inserted');
-        assert(code.contains(selectionContainer()), 'caret placed inside code block');
-        code.textContent = 'one';
+        assert(code, 'code block exists');
         placeCaretInText(code, 3);
         pressEnter();
         assert(code.textContent === 'one', 'enter keeps code text intact');
@@ -119,6 +133,36 @@
         assert(code.closest('pre').nextElementSibling?.tagName === 'P', 'second enter creates text line below code block');
         assert(editor.querySelectorAll('p').length === 1, 'second enter reuses existing text line below code block');
         assert(code.closest('pre').nextElementSibling.contains(selectionContainer()), 'caret exits to text line below code block');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        assert(slash.querySelector('[data-block="text"] .slash-menu-shortcut').textContent === '/r', 'regular text shows its slash shortcut');
+        typeSlashQuery(editor.querySelector('p'), 'r');
+        assert(slash.hidden, 'typing /r closes the slash menu');
+        assert(editor.children[0].tagName === 'P', 'typing /r inserts regular text');
+        assert(editor.children[0].innerHTML === '<br>', 'regular text shortcut clears the slash query');
+        assert(editor.children.length === 1, 'typing /r does not leave a trailing block behind');
+        assert(editor.textContent.trim() === '', 'typing /r does not leak alias text into the editor');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        typeSlashQuery(editor.querySelector('p'), 'h');
+        assert(slash.hidden, 'typing /h closes the slash menu');
+        assert(editor.querySelector('h2'), 'typing /h inserts heading');
+        assert(editor.children[1]?.tagName === 'P', 'heading keeps a trailing text line');
+        assert(editor.children[1].textContent.trim() === '', 'typing /h does not leak alias text below the heading');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        typeSlashQuery(editor.querySelector('p'), 'ta');
+        assert(editor.children[0].tagName === 'TABLE', 'typing /ta inserts table');
+        assert(editor.textContent.trim() === '', 'typing /ta does not leak alias text below the table');
+
+        editor.innerHTML = '<p>/</p>';
+        putSlashIn(editor.querySelector('p'));
+        typeSlashQuery(editor.querySelector('p'), 'd');
+        assert(editor.children[0].classList.contains('editor-divider-block'), 'typing /d inserts divider');
+        assert(editor.textContent.trim() === '', 'typing /d does not leak alias text below the divider');
 
         editor.innerHTML = '<p>/</p>';
         putSlashIn(editor.querySelector('p'));
@@ -159,6 +203,28 @@
         assert(editor.children[1].tagName === 'P', 'new text block lands below the divider');
         assert(editor.children[1].contains(selectionContainer()), 'caret moves into the new text block below the divider');
         assert(!insertedDivider.classList.contains('selected'), 'divider selection clears after entering a normal text block');
+
+        editor.innerHTML = '<p>Above</p><div class="editor-divider-block" contenteditable="true"><hr>bad<span>text</span></div><p>Below</p>';
+        const dirtyDivider = editor.children[1];
+        {
+            const range = document.createRange();
+            range.setStart(dirtyDivider.childNodes[1], 3);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+        assert(beforeInput('insertText', 'z'), 'typing inside a dirty divider wrapper is blocked');
+        assert(dirtyDivider.contentEditable === 'false', 'dirty divider is made non-editable');
+        assert(dirtyDivider.textContent.trim() === '', 'dirty divider text is removed');
+        assert(dirtyDivider.children.length === 1 && dirtyDivider.children[0].tagName === 'HR', 'dirty divider keeps only the rule element');
+        assert(window.getSelection().anchorNode === editor, 'dirty divider selection moves back to the editor boundary');
+        assert(window.getSelection().anchorOffset === 2, 'dirty divider caret lands after the divider block');
+
+        editor.innerHTML = '<p>Above</p><div class="editor-divider-block" contenteditable="true"><hr>typed</div><p>Below</p>';
+        editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'd' }));
+        assert(editor.children[1].contentEditable === 'false', 'input fallback makes divider non-editable');
+        assert(editor.children[1].textContent.trim() === '', 'input fallback strips text from divider');
 
         editor.innerHTML = '<hr><p><br></p>';
         const legacyDividerRect = editor.children[0].getBoundingClientRect();

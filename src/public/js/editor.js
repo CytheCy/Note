@@ -25,6 +25,7 @@ const Editor = (() => {
     let suppressLoad = false;  // avoid clobbering during save round-trips
     let slashRange = null;
     let slashIndex = 0;
+    let slashCommitTimer = null;
     let hoveredCodeBlock = null;
     let hoveredBlock = null;
     let draggedBlock = null;
@@ -38,21 +39,23 @@ const Editor = (() => {
     let codeExitBreak = null;
     const inlineFormatCommands = new Set(['bold', 'italic', 'underline']);
     const tableSlashBlocks = new Set(['table-row-below', 'table-col-right', 'table-row-delete', 'table-col-delete']);
+    // ponytail: /t waits briefly because /ta shares its prefix; distinct aliases can remove this timer.
+    const SLASH_PREFIX_COMMIT_DELAY = 250;
     const slashBlocks = [
-        ['text', 'bx bx-text', 'Regular text', '<p><br></p>'],
-        ['bullet', 'bx bx-list-ul', 'Bullet list', '<ul><li><br></li></ul>'],
-        ['number', 'bx bx-list-ol', 'Number list', '<ol><li><br></li></ol>'],
-        ['check', 'bx bx-list-check', 'Check list', '<ul class="check-list"><li><input type="checkbox"> <span><br></span></li></ul>'],
-        ['table', 'bx bx-table', 'Table', '<table><tbody><tr><th><br></th><th><br></th></tr><tr><td><br></td><td><br></td></tr></tbody></table><p><br></p>'],
-        ['table-row-below', 'bx bx-plus', 'Insert table row below', insertTableRowBelow],
-        ['table-col-right', 'bx bx-plus', 'Insert table column right', insertTableColumnRight],
-        ['table-row-delete', 'bx bx-trash', 'Delete table row', deleteTableRow],
-        ['table-col-delete', 'bx bx-trash', 'Delete table column', deleteTableColumn],
-        ['code', 'bx bx-code-alt', 'Code block', '<pre><code><span data-slash-caret></span><br></code></pre><p><br></p>'],
-        ['heading', 'bx bx-heading', 'Heading', '<h2><span data-slash-caret></span><br></h2><p><br></p>'],
-        ['divider', 'bx bx-minus', 'Divider', insertDividerBlock],
-        ['titled', 'bx bx-note', 'Titled Note', '<section class="titled-note"><h2><span data-slash-caret></span><br></h2><p><br></p></section><p><br></p>'],
+        { id: 'text', icon: 'bx bx-text', label: 'Regular text', alias: 'r', content: '<p><br></p>' },
+        { id: 'titled', icon: 'bx bx-note', label: 'Titled Note', alias: 't', content: '<section class="titled-note"><h2><span data-slash-caret></span><br></h2><p><br></p></section><p><br></p>' },
+        { id: 'bullet', icon: 'bx bx-list-ul', label: 'Bullet list', alias: 'b', content: '<ul><li><br></li></ul>' },
+        { id: 'number', icon: 'bx bx-list-ol', label: 'Number list', alias: 'n', content: '<ol><li><br></li></ol>' },
+        { id: 'check', icon: 'bx bx-list-check', label: 'Check list', alias: 'c', content: '<ul class="check-list"><li><input type="checkbox"> <span><br></span></li></ul>' },
+        { id: 'table', icon: 'bx bx-table', label: 'Table', alias: 'ta', content: '<table><tbody><tr><th><br></th><th><br></th></tr><tr><td><br></td><td><br></td></tr></tbody></table><p><br></p>' },
+        { id: 'table-row-below', icon: 'bx bx-plus', label: 'Insert table row below', alias: 'tr', content: insertTableRowBelow },
+        { id: 'table-col-right', icon: 'bx bx-plus', label: 'Insert table column right', alias: 'cr', content: insertTableColumnRight },
+        { id: 'table-row-delete', icon: 'bx bx-trash', label: 'Delete table row', alias: 'rd', content: deleteTableRow },
+        { id: 'table-col-delete', icon: 'bx bx-trash', label: 'Delete table column', alias: 'cd', content: deleteTableColumn },
+        { id: 'heading', icon: 'bx bx-heading', label: 'Heading', alias: 'h', content: '<h2><span data-slash-caret></span><br></h2><p><br></p>' },
+        { id: 'divider', icon: 'bx bx-minus', label: 'Divider', alias: 'd', content: insertDividerBlock },
     ];
+    const slashBlockMap = new Map(slashBlocks.map(block => [block.id, block]));
     elCodeCopy.type = 'button';
     elCodeCopy.className = 'code-copy-btn';
     elCodeCopy.title = 'Copy code';
@@ -119,7 +122,7 @@ const Editor = (() => {
     async function saveNow() {
         if (!currentNote) return;
         ensureEditorBlocks();
-        const content = elRich.innerHTML;
+        const content = editorContentForStorage();
         const title   = elTitle.value;
         if (content === currentNote.content &&
             title   === currentNote.title) return; // no-op
@@ -135,17 +138,25 @@ const Editor = (() => {
         }
     }
 
+    function editorContentForStorage() {
+        const clone = elRich.cloneNode(true);
+        clone.querySelectorAll('.editor-divider-block').forEach((divider) => {
+            divider.replaceWith(document.createElement('hr'));
+        });
+        return clone.innerHTML;
+    }
+
     // ---- events ------------------------------------------------------------
     elTitle.addEventListener('input', scheduleSave);
     elRich.addEventListener('input', () => {
+        ensureEditorBlocks();
         scheduleSave();
         syncToolbarVisibility();
         syncDividerSelection();
     });
     elRich.addEventListener('beforeinput', (e) => {
-        if (!blocksDividerBoundaryInput(e)) return;
-        e.preventDefault();
-        syncDividerSelection();
+        if (handleSlashBeforeInput(e)) return;
+        handleDividerBeforeInput(e);
     });
     elRich.addEventListener('mouseover', handleEditorPointer);
     elRich.addEventListener('mousemove', handleEditorPointer);
@@ -170,8 +181,9 @@ const Editor = (() => {
     });
     elRich.addEventListener('keyup', (e) => {
         syncToolbarVisibility();
-        if (e.key !== '/' || !selectionInEditor()) return;
-        openSlashMenu();
+        if (!selectionInEditor()) return;
+        if (!elSlash.hidden) return refreshSlashMenu();
+        if (e.key === '/') openSlashMenu();
     });
     elRich.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') disarmCodeExit();
@@ -185,7 +197,9 @@ const Editor = (() => {
             } else if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
                 insertSlashBlock(elSlash.querySelector('.active')?.dataset.block);
-            } else if (e.key.length === 1) {
+            } else if (e.key === ' ') {
+                hideSlashMenu();
+            } else if (e.key.length > 1 && e.key !== 'Backspace' && e.key !== 'Delete') {
                 hideSlashMenu();
             }
             return;
@@ -239,8 +253,12 @@ const Editor = (() => {
         scheduleSave();
     });
 
-    elSlash.innerHTML = slashBlocks.map(([id, icon, label]) =>
-        `<button type="button" data-block="${id}"><i class="${icon}"></i>${label}</button>`
+    elSlash.innerHTML = slashBlocks.map(({ id, icon, label, alias }) =>
+        `<button type="button" data-block="${id}" data-alias="${alias}">
+            <i class="${icon}"></i>
+            <span class="slash-menu-label">${label}</span>
+            <span class="slash-menu-shortcut">/${alias}</span>
+        </button>`
     ).join('');
 
     elSlash.addEventListener('mousedown', (e) => {
@@ -373,16 +391,45 @@ const Editor = (() => {
     function openSlashMenu() {
         const sel = window.getSelection();
         slashRange = sel.getRangeAt(0).cloneRange();
-        const rect = slashRange.getBoundingClientRect();
-        const editorRect = elRich.getBoundingClientRect();
-        elSlash.style.left = `${Math.min(rect.left || editorRect.left + 24, window.innerWidth - 230)}px`;
-        elSlash.style.top = `${(rect.bottom || editorRect.top + 24) + 6}px`;
+        refreshSlashMenu();
+    }
+
+    function refreshSlashMenu() {
+        if (!slashRange || !selectionInEditor() || !slashQueryIsValid()) return hideSlashMenu();
+        const query = currentSlashQuery().toLowerCase();
+        const exactMatch = currentSlashExactAliasMatch();
+        if (exactMatch) {
+            if (!slashAliasHasLongerMatch(query)) return insertSlashBlock(exactMatch.id);
+            scheduleSlashBlockCommit(exactMatch.id, query);
+        } else {
+            clearSlashCommitTimer();
+        }
         syncSlashMenuItems();
+        const buttons = visibleSlashButtons();
+        if (!buttons.length) return hideSlashMenu();
         elSlash.hidden = false;
+        positionSlashMenu();
         setActiveSlash(0);
     }
 
+    function positionSlashMenu() {
+        if (!slashRange) return;
+        const rect = slashRange.getBoundingClientRect();
+        const editorRect = elRich.getBoundingClientRect();
+        const menuWidth = elSlash.offsetWidth || 220;
+        const menuHeight = Math.min(Math.max(elSlash.scrollHeight || 0, visibleSlashButtons().length * 35 + 8), 320);
+        const left = Math.max(8, Math.min(rect.left || editorRect.left + 24, window.innerWidth - menuWidth - 8));
+        const belowTop = (rect.bottom || editorRect.top + 24) + 6;
+        const aboveTop = (rect.top || editorRect.top + 24) - menuHeight - 6;
+        const top = belowTop + menuHeight > window.innerHeight - 8 && aboveTop >= 8
+            ? aboveTop
+            : Math.max(8, Math.min(belowTop, window.innerHeight - menuHeight - 8));
+        elSlash.style.left = `${left}px`;
+        elSlash.style.top = `${top}px`;
+    }
+
     function hideSlashMenu() {
+        clearSlashCommitTimer();
         elSlash.hidden = true;
         slashRange = null;
     }
@@ -401,25 +448,42 @@ const Editor = (() => {
 
     function syncSlashMenuItems() {
         const inTable = !!currentTableCell();
+        const query = currentSlashQuery().toLowerCase();
+        const exactAliasMatch = !!slashBlockForAlias(query, inTable) && !slashAliasHasLongerMatch(query, inTable);
         elSlash.querySelectorAll('button').forEach(btn => {
-            btn.hidden = tableSlashBlocks.has(btn.dataset.block) && !inTable;
+            const block = slashBlockMap.get(btn.dataset.block);
+            const tableHidden = tableSlashBlocks.has(btn.dataset.block) && !inTable;
+            const queryHidden = query && !slashBlockMatchesQuery(block, query, exactAliasMatch);
+            btn.hidden = tableHidden || queryHidden;
         });
     }
 
+    function handleSlashBeforeInput(e) {
+        if (elSlash.hidden || e.inputType !== 'insertText' || !e.data || !slashRange || !selectionInEditor()) return false;
+        const token = currentSlashToken();
+        if (!token) return false;
+        const query = `${token.query}${e.data}`.toLowerCase();
+        const block = slashBlockForAlias(query);
+        if (!block) return false;
+        if (slashAliasHasLongerMatch(query)) return false;
+        e.preventDefault();
+        insertSlashBlock(block.id);
+        return true;
+    }
+
     function insertSlashBlock(id) {
-        const block = slashBlocks.find(([blockId]) => blockId === id);
+        clearSlashCommitTimer();
+        const block = slashBlockMap.get(id);
         if (!block || !slashRange) return hideSlashMenu();
-        const content = block[3];
+        const content = block.content;
         const sel = window.getSelection();
         if (typeof content === 'function') {
+            const range = currentSlashSelectionRange() || slashRange.cloneRange();
             sel.removeAllRanges();
-            sel.addRange(slashRange.cloneRange());
+            sel.addRange(range);
             if (!content()) return hideSlashMenu();
         } else {
-            sel.removeAllRanges();
-            sel.addRange(rangeWithSlashSelected());
-            document.execCommand('insertHTML', false, content);
-            placeCaretAtSlashMarker();
+            insertSlashHtml(content);
         }
         hideSlashMenu();
         ensureEditorBlocks();
@@ -427,7 +491,36 @@ const Editor = (() => {
         scheduleSave();
     }
 
+    function insertSlashHtml(content) {
+        const sel = window.getSelection();
+        const range = rangeWithSlashSelected();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        const insertRange = sel.getRangeAt(0);
+        const block = editorBlockForNode(insertRange.startContainer);
+        insertRange.deleteContents();
+        const fragment = insertRange.createContextualFragment(content);
+        const insertedNodes = [...fragment.childNodes];
+        if (isEmptyParagraph(block)) block.replaceWith(fragment);
+        else insertRange.insertNode(fragment);
+        if (placeCaretAtSlashMarker()) return;
+        const target = insertedNodes.find(node => node.nodeType === Node.ELEMENT_NODE && elRich.contains(node));
+        if (isEmptyParagraph(target) && !target.innerHTML) target.innerHTML = '<br>';
+        if (target) placeCaretIn(target);
+    }
+
     function rangeWithSlashSelected() {
+        return selectedSlashRange() || currentSlashSelectionRange() || fallbackSlashSelectionRange();
+    }
+
+    function selectedSlashRange() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || sel.isCollapsed || !elRich.contains(sel.anchorNode) || !elRich.contains(sel.focusNode)) return null;
+        const range = sel.getRangeAt(0).cloneRange();
+        return range.toString().startsWith('/') ? range : null;
+    }
+
+    function fallbackSlashSelectionRange() {
         const range = slashRange.cloneRange();
         const node = range.startContainer;
         const offset = range.startOffset;
@@ -437,17 +530,97 @@ const Editor = (() => {
         return range;
     }
 
+    function currentSlashToken() {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.isCollapsed || !elRich.contains(sel.anchorNode)) return null;
+        if (sel.anchorNode.nodeType !== Node.TEXT_NODE) return null;
+        const text = sel.anchorNode.data.slice(0, sel.anchorOffset);
+        const slashIndex = text.lastIndexOf('/');
+        if (slashIndex < 0) return null;
+        const prefix = text.slice(0, slashIndex);
+        if (prefix && !/\s$/.test(prefix)) return null;
+        const query = text.slice(slashIndex + 1);
+        if (/[\s/]/.test(query)) return null;
+        return { node: sel.anchorNode, startOffset: slashIndex, endOffset: sel.anchorOffset, query };
+    }
+
+    function currentSlashSelectionRange() {
+        const token = currentSlashToken();
+        if (!token) return null;
+        const range = document.createRange();
+        range.setStart(token.node, token.startOffset);
+        range.setEnd(token.node, token.endOffset);
+        return range;
+    }
+
+    function currentSlashQuery() {
+        return currentSlashToken()?.query || '';
+    }
+
+    function currentSlashExactAliasMatch() {
+        const inTable = !!currentTableCell();
+        const query = currentSlashQuery().toLowerCase();
+        return slashBlockForAlias(query, inTable);
+    }
+
+    function slashBlockForAlias(query, inTable = !!currentTableCell()) {
+        if (!query) return null;
+        return slashBlocks.find(block =>
+            (!tableSlashBlocks.has(block.id) || inTable) &&
+            block.alias.toLowerCase() === query
+        ) || null;
+    }
+
+    function slashAliasHasLongerMatch(query, inTable = !!currentTableCell()) {
+        if (!query) return false;
+        return slashBlocks.some(block =>
+            (!tableSlashBlocks.has(block.id) || inTable) &&
+            block.alias.length > query.length &&
+            block.alias.toLowerCase().startsWith(query)
+        );
+    }
+
+    function scheduleSlashBlockCommit(id, query) {
+        clearSlashCommitTimer();
+        slashCommitTimer = setTimeout(() => {
+            slashCommitTimer = null;
+            const match = currentSlashExactAliasMatch();
+            if (!elSlash.hidden && match?.id === id && currentSlashQuery().toLowerCase() === query) {
+                insertSlashBlock(id);
+            }
+        }, SLASH_PREFIX_COMMIT_DELAY);
+    }
+
+    function clearSlashCommitTimer() {
+        clearTimeout(slashCommitTimer);
+        slashCommitTimer = null;
+    }
+
+    function slashQueryIsValid() {
+        return !!currentSlashToken();
+    }
+
+    function slashBlockMatchesQuery(block, query, exactAliasMatch = false) {
+        if (!block || !query) return true;
+        const alias = block.alias.toLowerCase();
+        const label = block.label.toLowerCase();
+        if (exactAliasMatch) return alias === query;
+        return alias.startsWith(query) || label.startsWith(query);
+    }
+
     function removeSlashTrigger() {
         const sel = window.getSelection();
+        const range = rangeWithSlashSelected();
         sel.removeAllRanges();
-        sel.addRange(rangeWithSlashSelected());
+        sel.addRange(range);
         document.execCommand('delete', false, null);
     }
 
     function insertDividerBlock() {
         const sel = window.getSelection();
+        const range = rangeWithSlashSelected();
         sel.removeAllRanges();
-        sel.addRange(rangeWithSlashSelected());
+        sel.addRange(range);
         const block = editorBlockForNode(sel.anchorNode);
         document.execCommand('delete', false, null);
 
@@ -465,24 +638,37 @@ const Editor = (() => {
     function createDividerBlock() {
         const block = document.createElement('div');
         block.className = 'editor-divider-block';
-        block.contentEditable = 'false';
-        block.append(document.createElement('hr'));
+        resetDividerBlock(block);
         return block;
+    }
+
+    function resetDividerBlock(divider) {
+        const isTextBlock = divider.classList.contains('editor-text-block');
+        const isSelected = divider.classList.contains('selected');
+        divider.className = 'editor-divider-block';
+        if (isTextBlock) divider.classList.add('editor-text-block');
+        if (isSelected) divider.classList.add('selected');
+        divider.setAttribute('contenteditable', 'false');
+        divider.setAttribute('role', 'separator');
+        divider.setAttribute('aria-label', 'Divider');
+        divider.replaceChildren(document.createElement('hr'));
     }
 
     function placeCaretAtSlashMarker() {
         const marker = elRich.querySelector('[data-slash-caret]');
-        if (!marker) return;
+        if (!marker) return false;
         const target = marker.parentElement;
         marker.remove();
         placeCaretIn(target);
+        return true;
     }
 
     function currentTableCell() {
-        if (!slashRange) return null;
-        const node = slashRange.startContainer.nodeType === Node.ELEMENT_NODE
-            ? slashRange.startContainer
-            : slashRange.startContainer.parentElement;
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
+        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE
+            ? sel.anchorNode
+            : sel.anchorNode.parentElement;
         const cell = node?.closest?.('td,th');
         return cell && elRich.contains(cell) ? cell : null;
     }
@@ -630,39 +816,78 @@ const Editor = (() => {
         return node?.nodeType === Node.ELEMENT_NODE && node.classList.contains('editor-divider-block');
     }
 
-    function currentDividerBoundary() {
+    function currentDividerSelection() {
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount || !sel.isCollapsed || !elRich.contains(sel.anchorNode)) return null;
-        if (sel.anchorNode !== elRich) return null;
-        const divider = elRich.childNodes[sel.anchorOffset - 1];
-        return isDividerBlock(divider) ? divider : null;
+        if (sel.anchorNode === elRich) {
+            const dividerBefore = elRich.childNodes[sel.anchorOffset - 1];
+            const dividerAfter = elRich.childNodes[sel.anchorOffset];
+            if (isDividerBlock(dividerBefore)) return { divider: dividerBefore, side: 'after' };
+            if (isDividerBlock(dividerAfter)) return { divider: dividerAfter, side: 'before' };
+            return null;
+        }
+
+        const element = sel.anchorNode.nodeType === Node.ELEMENT_NODE ? sel.anchorNode : sel.anchorNode.parentElement;
+        const divider = element?.closest?.('.editor-divider-block');
+        return divider && elRich.contains(divider) ? { divider, side: 'inside' } : null;
     }
 
     function handleDividerBoundaryEnter() {
-        const divider = currentDividerBoundary();
-        if (!divider) return false;
+        const selection = currentDividerSelection();
+        if (!selection) return false;
+        insertParagraphAfterDivider(selection.divider);
+        return true;
+    }
+
+    function insertParagraphAfterDivider(divider) {
         const paragraph = document.createElement('p');
         paragraph.innerHTML = '<br>';
         divider.after(paragraph);
         placeCaretIn(paragraph);
         hideDividerSelection();
-        return true;
     }
 
-    function blocksDividerBoundaryInput(e) {
-        const divider = currentDividerBoundary();
-        if (!divider) return false;
-        return e.inputType?.startsWith('insert') && e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak';
+    function handleDividerBeforeInput(e) {
+        const selection = currentDividerSelection();
+        if (!selection) return false;
+        const inputType = e.inputType || '';
+        if (inputType === 'insertParagraph' || inputType === 'insertLineBreak') {
+            e.preventDefault();
+            insertParagraphAfterDivider(selection.divider);
+            scheduleSave();
+            return true;
+        }
+        if (inputType.startsWith('delete')) {
+            e.preventDefault();
+            removeDividerBlock(selection.divider);
+            scheduleSave();
+            return true;
+        }
+        if (!inputType.startsWith('insert')) return false;
+        e.preventDefault();
+        resetDividerBlock(selection.divider);
+        placeCaretAfter(selection.divider);
+        showDividerSelection(selection.divider);
+        return true;
     }
 
     function handleDividerDelete() {
-        const divider = currentDividerBoundary();
-        if (!divider) return false;
+        const selection = currentDividerSelection();
+        if (!selection) return false;
+        removeDividerBlock(selection.divider);
+        return true;
+    }
+
+    function removeDividerBlock(divider) {
         const target = divider.nextElementSibling || divider.previousElementSibling;
         divider.remove();
         hideDividerSelection();
-        if (target) placeCaretIn(target);
-        return true;
+        if (isDividerBlock(target)) {
+            placeCaretAfter(target);
+            showDividerSelection(target);
+        } else if (target) {
+            placeCaretIn(target);
+        }
     }
 
     function trimTrailingCodeBreaks(code) {
@@ -790,8 +1015,8 @@ const Editor = (() => {
     }
 
     function syncDividerSelection() {
-        const divider = currentDividerBoundary();
-        if (divider) showDividerSelection(divider);
+        const selection = currentDividerSelection();
+        if (selection) showDividerSelection(selection.divider);
         else hideDividerSelection();
     }
 
@@ -1177,17 +1402,20 @@ const Editor = (() => {
 
     function normalizeDividerBlocks() {
         const sel = window.getSelection();
+        const dividerSelection = currentDividerSelection();
         [...elRich.children].forEach((block) => {
             if (block.tagName !== 'HR') return;
             const divider = createDividerBlock();
             block.replaceWith(divider);
         });
         [...elRich.children].filter(isDividerBlock).forEach((divider) => {
-            divider.contentEditable = 'false';
+            let shouldMoveCaret = dividerSelection?.divider === divider;
+            resetDividerBlock(divider);
             const paragraph = divider.nextElementSibling;
-            if (!isEmptyParagraph(paragraph)) return;
-            const shouldMoveCaret = sel?.anchorNode && paragraph.contains(sel.anchorNode);
-            paragraph.remove();
+            if (isEmptyParagraph(paragraph)) {
+                shouldMoveCaret = shouldMoveCaret || (sel?.anchorNode && paragraph.contains(sel.anchorNode));
+                paragraph.remove();
+            }
             if (shouldMoveCaret) placeCaretAfter(divider);
         });
         syncDividerSelection();
