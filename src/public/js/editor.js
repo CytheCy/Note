@@ -17,6 +17,9 @@ const Editor = (() => {
     const elSlash   = document.getElementById('slashMenu');
     const elCodeCopy = document.createElement('button');
     const elBlockHandle = document.createElement('button');
+    const elBlockActions = document.createElement('div');
+    const elBlockCut = document.createElement('button');
+    const elBlockCopy = document.createElement('button');
     const elBlockDropLine = document.createElement('div');
     const LAST_NOTE_KEY = 'lastNoteId';
 
@@ -69,6 +72,18 @@ const Editor = (() => {
     elBlockHandle.innerHTML = '<i class="bx bx-dots-vertical-rounded"></i>';
     elBlockHandle.hidden = true;
     document.body.appendChild(elBlockHandle);
+    elBlockActions.className = 'block-actions';
+    elBlockActions.hidden = true;
+    elBlockCut.type = 'button';
+    elBlockCut.title = 'Cut block';
+    elBlockCut.setAttribute('aria-label', 'Cut block');
+    elBlockCut.innerHTML = '<i class="bx bx-cut"></i>';
+    elBlockCopy.type = 'button';
+    elBlockCopy.title = 'Copy block';
+    elBlockCopy.setAttribute('aria-label', 'Copy block');
+    elBlockCopy.innerHTML = '<i class="bx bx-copy"></i>';
+    elBlockActions.append(elBlockCut, elBlockCopy);
+    document.body.appendChild(elBlockActions);
     elBlockDropLine.className = 'editor-block-drop-line';
     elBlockDropLine.hidden = true;
     document.body.appendChild(elBlockDropLine);
@@ -95,6 +110,7 @@ const Editor = (() => {
         syncToolbarVisibility();
         hideSlashMenu();
         hideBlockHandle();
+        hideBlockActions();
         hideBlockDropLine();
         hideDividerSelection();
         clearSelectedBlock();
@@ -110,6 +126,7 @@ const Editor = (() => {
         elIcon.className = 'bx bx-file';
         hideSlashMenu();
         hideBlockHandle();
+        hideBlockActions();
         hideBlockDropLine();
         hideDividerSelection();
         clearSelectedBlock();
@@ -174,11 +191,12 @@ const Editor = (() => {
         showCodeCopy(pre);
     }
     elRich.addEventListener('mouseleave', (e) => {
-        if (!draggedBlock && !elBlockHandle.contains(e.relatedTarget)) scheduleBlockHandleHide();
+        if (!draggedBlock && !blockHoverUiContains(e.relatedTarget)) scheduleBlockHoverUiHide();
         if (!elCodeCopy.contains(e.relatedTarget)) hideCodeCopy();
     });
     elRich.addEventListener('scroll', () => {
         positionBlockHandle();
+        positionBlockActions();
         positionBlockDropLine();
     });
     elRich.addEventListener('mousedown', (e) => {
@@ -301,7 +319,7 @@ const Editor = (() => {
         if (hoveredBlock) positionBlockHandle();
     });
     elBlockHandle.addEventListener('mouseleave', (e) => {
-        if (!draggedBlock && !elRich.contains(e.relatedTarget)) scheduleBlockHandleHide();
+        if (!draggedBlock && !blockHoverUiContains(e.relatedTarget) && !elRich.contains(e.relatedTarget)) scheduleBlockHoverUiHide();
     });
     elBlockHandle.addEventListener('mousedown', (e) => {
         if (e.button !== 0 || !hoveredBlock || !hoveredBlock.isConnected) return;
@@ -310,12 +328,33 @@ const Editor = (() => {
         selectBlock(hoveredBlock);
         pendingHandleDrag = { block: hoveredBlock, x: e.clientX, y: e.clientY };
     });
+    elBlockActions.addEventListener('mouseenter', () => {
+        cancelBlockHandleHide();
+        if (hoveredBlock) positionBlockActions();
+    });
+    elBlockActions.addEventListener('mouseleave', (e) => {
+        if (!draggedBlock && !blockHoverUiContains(e.relatedTarget) && !elRich.contains(e.relatedTarget)) scheduleBlockHoverUiHide();
+    });
+    elBlockActions.addEventListener('mousedown', (e) => e.preventDefault());
+    elBlockCopy.addEventListener('click', async () => {
+        if (!hoveredBlock || !isBlockActionTarget(hoveredBlock)) return;
+        await copyBlock(hoveredBlock);
+        showBlockActionFeedback(elBlockCopy);
+    });
+    elBlockCut.addEventListener('click', async () => {
+        if (!hoveredBlock || !isBlockActionTarget(hoveredBlock)) return;
+        const block = hoveredBlock;
+        await copyBlock(block);
+        removeBlock(block);
+        showBlockActionFeedback(elBlockCut);
+    });
     document.addEventListener('mousemove', onDocumentPointerMove, true);
     document.addEventListener('pointermove', onDocumentPointerMove, true);
     window.addEventListener('mousemove', onBlockDragMove);
     window.addEventListener('mouseup', onBlockDragEnd);
     window.addEventListener('resize', () => {
         positionBlockHandle();
+        positionBlockActions();
         positionBlockDropLine();
     });
 
@@ -357,6 +396,7 @@ const Editor = (() => {
         hideSlashMenu();
         hideCodeCopy();
         hideBlockHandle();
+        hideBlockActions();
         hideBlockDropLine();
         hideDividerSelection();
     }
@@ -1099,20 +1139,69 @@ const Editor = (() => {
         textarea.remove();
     }
 
+    async function copyBlock(block) {
+        const clone = block.cloneNode(true);
+        clone.classList.remove('editor-block-selected', 'editor-block-dragging', 'editor-text-block');
+        clone.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            if (input.checked) input.setAttribute('checked', '');
+            else input.removeAttribute('checked');
+        });
+        const html = clone.outerHTML;
+        const text = block.innerText || block.textContent || '';
+
+        if (navigator.clipboard?.write && window.ClipboardItem && window.isSecureContext) {
+            try {
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'text/html': new Blob([html], { type: 'text/html' }),
+                        'text/plain': new Blob([text], { type: 'text/plain' }),
+                    }),
+                ]);
+                return;
+            } catch (_) {
+                // Fall through to plain text when rich clipboard writes are denied.
+            }
+        }
+        await copyText(text);
+    }
+
+    function removeBlock(block) {
+        const target = block.nextElementSibling || block.previousElementSibling;
+        block.remove();
+        if (!elRich.children.length) {
+            const paragraph = document.createElement('p');
+            paragraph.innerHTML = '<br>';
+            elRich.append(paragraph);
+            placeCaretIn(paragraph);
+        } else if (target?.isConnected) {
+            placeCaretIn(target);
+        } else {
+            elRich.focus();
+        }
+        hideBlockHandle();
+        scheduleSave();
+    }
+
+    function showBlockActionFeedback(button) {
+        button.classList.add('done');
+        setTimeout(() => button.classList.remove('done'), 900);
+    }
+
     function updateHoveredBlock(node, clientX, clientY) {
         if (draggedBlock) return;
         cancelBlockHandleHide();
         ensureEditorBlocks();
         const block = editorBlockFromPoint(clientX, clientY) || editorBlockForNode(node);
-        if (!block) return scheduleBlockHandleHide();
+        if (!block) return scheduleBlockHoverUiHide();
         hoveredBlock = block;
         positionBlockHandle();
+        positionBlockActions();
         elBlockHandle.hidden = false;
     }
 
     function onDocumentPointerMove(e) {
         if (draggedBlock) return;
-        if (elBlockHandle.contains(e.target)) {
+        if (blockHoverUiContains(e.target)) {
             cancelBlockHandleHide();
             return;
         }
@@ -1121,8 +1210,9 @@ const Editor = (() => {
             hoveredBlock = block;
             cancelBlockHandleHide();
             positionBlockHandle();
+            positionBlockActions();
         } else if (!elRich.contains(e.target)) {
-            scheduleBlockHandleHide();
+            scheduleBlockHoverUiHide();
         }
     }
 
@@ -1275,10 +1365,45 @@ const Editor = (() => {
         return rect.top + Math.max(0, Math.min(rect.height - 24, 4));
     }
 
+    function positionBlockActions() {
+        if (!hoveredBlock || !hoveredBlock.isConnected || draggedBlock || !isBlockActionTarget(hoveredBlock)) {
+            return hideBlockActions();
+        }
+        const rect = hoveredBlock.getBoundingClientRect();
+        const editorRect = elRich.getBoundingClientRect();
+        if (rect.bottom < editorRect.top || rect.top > editorRect.bottom) return hideBlockActions();
+        const width = elBlockActions.offsetWidth || 58;
+        elBlockActions.style.left = `${Math.min(window.innerWidth - width - 8, Math.max(8, rect.right - width - 6))}px`;
+        elBlockActions.style.top = `${blockHandleTop(hoveredBlock, rect)}px`;
+        elBlockActions.hidden = false;
+    }
+
+    function isBlockActionTarget(block) {
+        if (!block || block.parentElement !== elRich || isDividerBlock(block)) return false;
+        if (block.matches('p, section.titled-note, ol')) return true;
+        if (block.matches('ul')) return true;
+        return false;
+    }
+
+    function blockHoverUiContains(target) {
+        return elBlockHandle.contains(target) || elBlockActions.contains(target);
+    }
+
     function hideBlockHandle() {
         cancelBlockHandleHide();
         hoveredBlock = null;
         elBlockHandle.hidden = true;
+        hideBlockActions();
+    }
+
+    function hideBlockActions() {
+        elBlockActions.hidden = true;
+        elBlockCut.classList.remove('done');
+        elBlockCopy.classList.remove('done');
+    }
+
+    function scheduleBlockHoverUiHide() {
+        scheduleBlockHandleHide();
     }
 
     function scheduleBlockHandleHide() {
