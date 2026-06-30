@@ -229,6 +229,10 @@ button { font-family: inherit; cursor: pointer; }
 }
 .rich-text-editor:focus { outline: none; }
 .rich-text-editor > * { position: relative; }
+.rich-text-editor > .editor-block-selected {
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
 .rich-text-editor > .editor-block-dragging,
 .rich-text-editor > .editor-block-dragging * { cursor: grabbing; }
 .rich-text-editor h1, .rich-text-editor h2 { margin-top: 1.2em; }

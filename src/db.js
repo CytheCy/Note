@@ -34,7 +34,9 @@ try {
 }
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
-const DB_PATH = path.join(DATA_DIR, 'document.db');
+const DB_PATH = process.env.NOTE_DB_PATH
+    ? path.resolve(process.env.NOTE_DB_PATH)
+    : path.join(DATA_DIR, 'document.db');
 const SCHEMA_PATH = path.join(__dirname, '..', 'schema.sql');
 
 // Crockford base32 — same alphabet as ULID, sorted, unambiguous (no I/L/O/U).
@@ -101,6 +103,19 @@ function applySchema(db) {
                 WHERE noteId = NEW.noteId;
         END;
     `);
+
+    // Repair notes orphaned by older failed delete attempts.
+    db.prepare(`
+        UPDATE notes
+        SET isDeleted = 1
+        WHERE noteId <> @rootId
+          AND isDeleted = 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM note_relations r
+              WHERE r.noteId = notes.noteId
+                AND r.isDeleted = 0
+          )`).run({ rootId: ROOT_ID });
 }
 
 // One shared connection for the app (better-sqlite3 is sync → single conn is fine).
@@ -152,6 +167,20 @@ const stmts = {
         WHERE parentId = ? AND isDeleted = 0`),
 };
 
+const removeRelationTx = db.transaction((relationId) => {
+    const rel = stmts.relGet.get(relationId);
+    if (!rel || rel.isDeleted) return false;
+
+    stmts.relDelete.run(relationId);
+
+    const otherParents = stmts.relParents.all(rel.noteId);
+    if (otherParents.length === 0) {
+        stmts.noteSoftDelete.run({ noteId: rel.noteId });
+    }
+
+    return true;
+});
+
 // ---------------------------------------------------------------------------
 //  Public API
 // ---------------------------------------------------------------------------
@@ -202,14 +231,7 @@ const Notes = {
      * note row itself is flagged deleted; otherwise only the relation is.
      */
     removeRelation(relationId) {
-        const rel = stmts.relGet.get(relationId);
-        if (!rel) return false;
-        stmts.relDelete.run(relationId);
-        const otherParents = stmts.relParents.all(rel.noteId);
-        if (otherParents.length === 0) {
-            stmts.noteSoftDelete.run(rel.noteId);
-        }
-        return true;
+        return removeRelationTx(relationId);
     },
 
     /** Search by title/content — backs the global search box. */
@@ -363,4 +385,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { db, Notes, Tree, newId, ROOT_ID };
+module.exports = { db, Notes, Tree, newId, ROOT_ID, DB_PATH };

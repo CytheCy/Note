@@ -28,8 +28,9 @@ const Editor = (() => {
     let slashCommitTimer = null;
     let hoveredCodeBlock = null;
     let hoveredBlock = null;
+    let selectedBlock = null;
     let draggedBlock = null;
-    let pendingBlockDrag = null;
+    let pendingHandleDrag = null;
     let blockDropTarget = null;
     let blockDropIntent = 'before';
     let blockHandleHideTimer = null;
@@ -96,6 +97,7 @@ const Editor = (() => {
         hideBlockHandle();
         hideBlockDropLine();
         hideDividerSelection();
+        clearSelectedBlock();
         suppressLoad = false;
     }
 
@@ -110,6 +112,7 @@ const Editor = (() => {
         hideBlockHandle();
         hideBlockDropLine();
         hideDividerSelection();
+        clearSelectedBlock();
     }
 
     // ---- autosave ----------------------------------------------------------
@@ -140,6 +143,9 @@ const Editor = (() => {
 
     function editorContentForStorage() {
         const clone = elRich.cloneNode(true);
+        clone.querySelectorAll('.editor-block-selected, .editor-block-dragging').forEach((block) => {
+            block.classList.remove('editor-block-selected', 'editor-block-dragging');
+        });
         clone.querySelectorAll('.editor-divider-block').forEach((divider) => {
             divider.replaceWith(document.createElement('hr'));
         });
@@ -177,7 +183,13 @@ const Editor = (() => {
     });
     elRich.addEventListener('mousedown', (e) => {
         disarmCodeExit();
-        prepareBlockDrag(e);
+        if (!elBlockHandle.contains(e.target) && !e.target.closest?.('.editor-divider-block')) clearSelectedBlock();
+    });
+    elRich.addEventListener('mouseup', (e) => {
+        if (e.button !== 0 || draggedBlock || pendingHandleDrag) return;
+        if (!ensureCaretFromClick(e)) return;
+        syncDividerSelection();
+        syncToolbarVisibility();
     });
     elRich.addEventListener('keyup', (e) => {
         syncToolbarVisibility();
@@ -294,7 +306,9 @@ const Editor = (() => {
     elBlockHandle.addEventListener('mousedown', (e) => {
         if (e.button !== 0 || !hoveredBlock || !hoveredBlock.isConnected) return;
         e.preventDefault();
-        startBlockDrag(hoveredBlock, e.clientX, e.clientY);
+        e.stopPropagation();
+        selectBlock(hoveredBlock);
+        pendingHandleDrag = { block: hoveredBlock, x: e.clientX, y: e.clientY };
     });
     document.addEventListener('mousemove', onDocumentPointerMove, true);
     document.addEventListener('pointermove', onDocumentPointerMove, true);
@@ -1033,6 +1047,18 @@ const Editor = (() => {
         elRich.classList.remove('divider-selected-active');
     }
 
+    function selectBlock(block) {
+        if (!block || !elRich.contains(block)) return clearSelectedBlock();
+        if (selectedBlock && selectedBlock !== block) selectedBlock.classList.remove('editor-block-selected');
+        selectedBlock = block;
+        selectedBlock.classList.add('editor-block-selected');
+    }
+
+    function clearSelectedBlock() {
+        selectedBlock?.classList.remove('editor-block-selected');
+        selectedBlock = null;
+    }
+
     function caretAtStartOf(node) {
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount) return false;
@@ -1119,12 +1145,22 @@ const Editor = (() => {
         updateHoveredBlock(e.currentTarget, e.clientX, e.clientY);
     }
 
-    function prepareBlockDrag(e) {
-        if (e.button !== 0 || elBlockHandle.contains(e.target)) return;
+    function ensureCaretFromClick(e) {
         const target = e.target.nodeType === Node.ELEMENT_NODE ? e.target : e.target.parentElement;
-        if (target?.closest?.('input, button, select, textarea')) return;
-        const block = editorBlockForNode(e.target) || editorBlockFromPoint(e.clientX, e.clientY);
-        pendingBlockDrag = block ? { block, x: e.clientX, y: e.clientY } : null;
+        if (!target || target.closest('.editor-divider-block, input, button, select, textarea')) return false;
+
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount && !sel.isCollapsed) return false;
+
+        const range = caretRangeFromPoint(e.clientX, e.clientY) || fallbackClickRange(e.clientX, e.clientY, target);
+        if (!range) return false;
+
+        e.preventDefault();
+        elRich.focus();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        hideDividerSelection();
+        return true;
     }
 
     function startBlockDrag(block, clientX, clientY) {
@@ -1132,9 +1168,10 @@ const Editor = (() => {
         hideSlashMenu();
         disarmCodeExit();
         cancelBlockHandleHide();
-        pendingBlockDrag = null;
+        pendingHandleDrag = null;
         draggedBlock = block;
         hoveredBlock = draggedBlock;
+        selectBlock(block);
         draggedBlock.classList.add('editor-block-dragging');
         elBlockHandle.classList.add('dragging');
         updateBlockDropFromPointer(clientX, clientY);
@@ -1168,6 +1205,36 @@ const Editor = (() => {
         if (positionBlock) return positionBlock;
 
         return editorBlockByRect(clientX, clientY);
+    }
+
+    function caretRangeFromPoint(clientX, clientY) {
+        const domRange = document.caretRangeFromPoint?.(clientX, clientY);
+        if (domRange && elRich.contains(domRange.startContainer)) return domRange;
+
+        const position = document.caretPositionFromPoint?.(clientX, clientY);
+        if (!position || !elRich.contains(position.offsetNode)) return null;
+
+        const range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+        return range;
+    }
+
+    function fallbackClickRange(clientX, clientY, target) {
+        const block = editorBlockForNode(target) || nearestEditorBlock(clientY) || elRich.lastElementChild;
+        if (!block) return null;
+
+        const rect = block.getBoundingClientRect();
+        if (clientY > rect.bottom) return collapsedRangeAtBlockBoundary(block, 'end');
+        if (clientY < rect.top) return collapsedRangeAtBlockBoundary(block, 'start');
+        return collapsedRangeAtBlockBoundary(block, clientX <= rect.left + rect.width / 2 ? 'start' : 'end');
+    }
+
+    function collapsedRangeAtBlockBoundary(block, side) {
+        const range = document.createRange();
+        range.selectNodeContents(block);
+        range.collapse(side !== 'end');
+        return range;
     }
 
     function editorBlockByRect(clientX, clientY) {
@@ -1277,18 +1344,18 @@ const Editor = (() => {
     function cleanupBlockDrag() {
         draggedBlock?.classList.remove('editor-block-dragging');
         draggedBlock = null;
-        pendingBlockDrag = null;
+        pendingHandleDrag = null;
         blockDropIntent = 'before';
         elBlockHandle.classList.remove('dragging');
         hideBlockDropLine();
     }
 
     function onBlockDragMove(e) {
-        if (pendingBlockDrag && !draggedBlock) {
-            const distance = Math.hypot(e.clientX - pendingBlockDrag.x, e.clientY - pendingBlockDrag.y);
+        if (pendingHandleDrag && !draggedBlock) {
+            const distance = Math.hypot(e.clientX - pendingHandleDrag.x, e.clientY - pendingHandleDrag.y);
             if (distance < 5) return;
             e.preventDefault();
-            startBlockDrag(pendingBlockDrag.block, e.clientX, e.clientY);
+            startBlockDrag(pendingHandleDrag.block, e.clientX, e.clientY);
         }
         if (!draggedBlock) return;
         e.preventDefault();
@@ -1296,8 +1363,9 @@ const Editor = (() => {
     }
 
     function onBlockDragEnd(e) {
-        if (pendingBlockDrag && !draggedBlock) {
-            pendingBlockDrag = null;
+        if (pendingHandleDrag && !draggedBlock) {
+            pendingHandleDrag = null;
+            positionBlockHandle();
             return;
         }
         if (!draggedBlock) return;

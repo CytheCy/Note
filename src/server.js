@@ -23,7 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
-const { Notes, Tree, ROOT_ID } = require('./db');
+const { Notes, Tree, ROOT_ID, DB_PATH } = require('./db');
 
 const app = express();
 app.use(cors());
@@ -103,9 +103,14 @@ app.put('/api/notes/:noteId', (req, res) => {
 });
 
 app.delete('/api/notes/relation/:relationId', (req, res) => {
-    const ok = Notes.removeRelation(req.params.relationId);
-    if (!ok) return res.status(404).json({ error: 'relation not found' });
-    res.json({ ok: true });
+    try {
+        const ok = Notes.removeRelation(req.params.relationId);
+        if (!ok) return res.status(404).json({ error: 'relation not found' });
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[delete relation]', e);
+        res.status(500).json({ error: 'internal server error' });
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -128,5 +133,5 @@ app.get('*', (req, res, next) => {
 const PORT = process.env.PORT || 3777;
 app.listen(PORT, () => {
     console.log(`[Note] serving on http://localhost:${PORT}`);
-    console.log(`  DB: ${path.join(__dirname, '..', 'data', 'document.db')}`);
+    console.log(`  DB: ${DB_PATH}`);
 });
