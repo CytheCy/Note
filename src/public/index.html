@@ -29,7 +29,44 @@
         <!-- ---------- LEFT: TREE ---------- -->
         <aside id="sidebar" class="pane pane-sidebar">
             <div class="pane-header">
-                <span><i class="bx bx-folder-open"></i> Note Tree</span>
+                <button id="notebookMenuButton" class="notebook-menu-button" type="button" aria-haspopup="menu" aria-expanded="false">
+                    <i id="notebookIcon" class="bx bx-book-open"></i>
+                    <span id="notebookName">Notebook</span>
+                    <i class="bx bx-chevron-down"></i>
+                </button>
+                <div id="notebookMenu" class="notebook-menu" hidden>
+                    <button data-action="edit-notebook" type="button"><i class="bx bx-edit-alt"></i> Edit Current Notebook</button>
+                    <button data-action="open-notebook" type="button"><i class="bx bx-folder-open"></i> Open Another Notebook</button>
+                    <button data-action="create-notebook" type="button"><i class="bx bx-book-add"></i> Create New Notebook</button>
+                    <form id="createNotebookPanel" class="create-notebook-panel" hidden>
+                        <label>
+                            <span>Name</span>
+                            <input id="createNotebookName" type="text" value="Untitled Notebook" autocomplete="off" />
+                        </label>
+                        <label>
+                            <span>Icon</span>
+                            <input id="createNotebookIconSearch" type="search" placeholder="Search icons" autocomplete="off" />
+                            <div id="createNotebookIcons" class="notebook-icon-options" role="radiogroup" aria-label="Notebook icon"></div>
+                        </label>
+                        <label>
+                            <span>Folder</span>
+                            <div class="notebook-folder-row">
+                                <input id="createNotebookFolder" type="text" autocomplete="off" />
+                                <button id="chooseNotebookFolderBtn" type="button" title="Choose folder" aria-label="Choose folder">
+                                    <i class="bx bx-folder-open"></i>
+                                </button>
+                            </div>
+                        </label>
+                        <div class="notebook-create-preview" id="createNotebookPath"></div>
+                        <div class="notebook-create-actions">
+                            <button id="cancelCreateNotebookBtn" type="button">Cancel</button>
+                            <button class="primary" type="submit">Create</button>
+                        </div>
+                    </form>
+                    <div class="ctx-sep"></div>
+                    <div class="notebook-menu-section">Opened Notebooks</div>
+                    <div id="openedNotebookList" class="opened-notebook-list"></div>
+                </div>
             </div>
             <div id="tree" class="tree" role="tree">
                 <!-- tree nodes injected by tree.js -->

@@ -36,4 +36,11 @@ const Api = {
 
     // search
     search:       (q)          => Api._req('GET',    `/search?q=${encodeURIComponent(q)}`),
+
+    // notebooks
+    getNotebooks:      ()       => Api._req('GET',    '/notebooks'),
+    renameNotebook:    (b)      => Api._req('PUT',    '/notebooks/current', b),
+    openNotebook:      (b)      => Api._req('POST',   '/notebooks/open', b),
+    createNotebook:    (b)      => Api._req('POST',   '/notebooks/create', b),
+    switchNotebook:    (b)      => Api._req('POST',   '/notebooks/switch', b),
 };

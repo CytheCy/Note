@@ -85,6 +85,7 @@ const TreeView = (() => {
         row.dataset.relationId = node.relationId;
         row.dataset.noteId = node.noteId;
         row.dataset.depth = depth;
+        if (node.relationId === selectedRelationId) row.classList.add('selected');
 
         // caret
         const caret = document.createElement('span');
@@ -163,12 +164,16 @@ const TreeView = (() => {
         elTree.innerHTML = '';
         const kids = rootTree.children || [];
         if (kids.length === 0) {
+            clearSelection();
             elTree.innerHTML = '<div class="tree-empty">No notes yet. Click <i class="bx bx-file-plus"></i> to create one.</div>';
             return;
         }
         const frag = document.createDocumentFragment();
         kids.forEach(child => frag.appendChild(renderNode(child, 0)));
         elTree.appendChild(frag);
+        if (selectedRelationId && !elTree.querySelector(`.tree-row[data-relation-id="${selectedRelationId}"]`)) {
+            clearSelection();
+        }
     }
 
     // ---- selection ---------------------------------------------------------
@@ -182,6 +187,12 @@ const TreeView = (() => {
 
     function getSelected() {
         return { relationId: selectedRelationId, noteId: selectedNoteId };
+    }
+
+    function clearSelection() {
+        document.querySelectorAll('.tree-row.selected').forEach(r => r.classList.remove('selected'));
+        selectedRelationId = null;
+        selectedNoteId = null;
     }
 
     // ---- expand / collapse -------------------------------------------------
@@ -643,6 +654,10 @@ const TreeView = (() => {
         },
 
         async createChild(parentId, type = 'text', title = 'New Note') {
+            if (parentId !== 'root' && !document.querySelector(`.tree-row[data-note-id="${parentId}"]`)) {
+                parentId = 'root';
+                clearSelection();
+            }
             const note = await Api.createNote({ parentId, type, title });
             // make sure parent is expanded so the new child is visible
             const parentRow = document.querySelector(`.tree-row[data-note-id="${parentId}"]`);
@@ -664,6 +679,7 @@ const TreeView = (() => {
         },
 
         getSelected,
+        clearSelection,
         triggerRename,
         showProperties,
         openIconPicker,

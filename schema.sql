@@ -68,6 +68,15 @@ INSERT OR IGNORE INTO notes (noteId, title, content, type)
 VALUES ('root', '__root__', '', 'text');
 
 -- ---------------------------------------------------------------------------
+--  Notebook metadata
+--  The SQLite file is the notebook; this stores its display name.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notebook_meta (
+    key      TEXT PRIMARY KEY,
+    value    TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
 --  Schema version (simple migration marker)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema_version (

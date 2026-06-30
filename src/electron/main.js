@@ -11,15 +11,48 @@
 
 'use strict';
 
-const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execSync } = require('child_process');
+const net = require('net');
 
 let serverProc = null;
 let win = null;
-const PORT = process.env.PORT || 3777;
-const URL = `http://localhost:${PORT}`;
+let PORT = Number(process.env.PORT) || 3777;
+let URL = `http://localhost:${PORT}`;
+
+ipcMain.handle('dialog:open-notebook', async () => {
+    const result = await dialog.showOpenDialog(win, {
+        title: 'Open Notebook',
+        properties: ['openFile'],
+        filters: [
+            { name: 'Notebooks', extensions: ['db', 'sqlite', 'sqlite3'] },
+            { name: 'All Files', extensions: ['*'] },
+        ],
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('dialog:create-notebook', async (_event, defaultPath) => {
+    const result = await dialog.showSaveDialog(win, {
+        title: 'Create Notebook',
+        defaultPath: defaultPath || 'Untitled Notebook.db',
+        filters: [
+            { name: 'Notebooks', extensions: ['db'] },
+            { name: 'SQLite', extensions: ['sqlite', 'sqlite3'] },
+        ],
+    });
+    return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle('dialog:choose-notebook-folder', async () => {
+    const result = await dialog.showOpenDialog(win, {
+        title: 'Choose Notebook Folder',
+        properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+});
 
 /**
  * Find the SYSTEM node binary — critically NOT Electron itself.
@@ -51,6 +84,24 @@ function findSystemNode() {
     }
 }
 
+function portIsAvailable(port) {
+    return new Promise(resolve => {
+        const server = net.createServer();
+        server.once('error', () => resolve(false));
+        server.once('listening', () => {
+            server.close(() => resolve(true));
+        });
+        server.listen(port, '127.0.0.1');
+    });
+}
+
+async function findAvailablePort(startPort) {
+    for (let port = startPort; port < startPort + 50; port += 1) {
+        if (await portIsAvailable(port)) return port;
+    }
+    throw new Error(`no available port found from ${startPort} to ${startPort + 49}`);
+}
+
 function startServer() {
     const serverPath = path.join(__dirname, '..', 'server.js');
     const nodeBin = findSystemNode();
@@ -70,15 +121,16 @@ function startServer() {
 async function waitForServer(timeoutMs = 15000) {
     const http = require('http');
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-        const ok = await new Promise(resolve => {
-            const req = http.get(URL + '/api/tree', res => {
-                res.resume();
-                resolve(res.statusCode === 200);
-            });
-            req.on('error', () => resolve(false));
-            req.setTimeout(800, () => { req.destroy(); resolve(false); });
+    const healthy = (pathName) => new Promise(resolve => {
+        const req = http.get(URL + pathName, res => {
+            res.resume();
+            resolve(res.statusCode === 200);
         });
+        req.on('error', () => resolve(false));
+        req.setTimeout(800, () => { req.destroy(); resolve(false); });
+    });
+    while (Date.now() < deadline) {
+        const ok = await healthy('/api/tree') && await healthy('/api/notebooks');
         if (ok) return;
         await new Promise(r => setTimeout(r, 400));
     }
@@ -99,6 +151,17 @@ async function createWindow() {
             nodeIntegration: false,
             preload: path.join(__dirname, 'preload.js'),
         },
+    });
+
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        const label = ['debug', 'info', 'warn', 'error'][level] || 'log';
+        console.log(`[renderer:${label}] ${message} (${sourceId}:${line})`);
+    });
+    win.webContents.on('did-fail-load', (_event, code, description, validatedURL) => {
+        console.error(`[renderer] failed to load ${validatedURL}: ${code} ${description}`);
+    });
+    win.webContents.on('render-process-gone', (_event, details) => {
+        console.error('[renderer] process gone', details);
     });
 
     // Native application menu. "Settings" lives under File and tells the
@@ -156,7 +219,6 @@ async function createWindow() {
                 {
                     label: 'About',
                     click: () => {
-                        const { dialog } = require('electron');
                         dialog.showMessageBox(win, {
                             type: 'info',
                             title: 'About',
@@ -181,6 +243,10 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+    if (!process.env.PORT) {
+        PORT = await findAvailablePort(PORT);
+        URL = `http://localhost:${PORT}`;
+    }
     startServer();
     try {
         await waitForServer();

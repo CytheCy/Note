@@ -23,7 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
-const { Notes, Tree, ROOT_ID, DB_PATH } = require('./db');
+const { Notes, Tree, Notebooks, ROOT_ID, getDbPath, getDb } = require('./db');
 
 const app = express();
 app.use(cors());
@@ -79,13 +79,43 @@ app.get('/api/notes/:noteId', (req, res) => {
 });
 
 // Parents of a note (the clones' parent rows). Inline to avoid exposing raw stmts.
-const { db } = require('./db');
 function db_parents(noteId) {
-    return db.prepare(`
+    return getDb().prepare(`
         SELECT r.relationId, r.parentId, p.title
         FROM note_relations r JOIN notes p ON p.noteId = r.parentId
         WHERE r.noteId = ? AND r.isDeleted = 0`).all(noteId);
 }
+
+// ---------------------------------------------------------------------------
+//  Notebooks
+// ---------------------------------------------------------------------------
+app.get('/api/notebooks', (_req, res) => {
+    res.json(Notebooks.list());
+});
+
+app.put('/api/notebooks/current', (req, res) => {
+    try {
+        res.json(Notebooks.update(req.body || {}));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/open', (req, res) => {
+    try {
+        res.json(Notebooks.open(req.body?.path));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/create', (req, res) => {
+    try {
+        res.status(201).json(Notebooks.create(req.body?.path, req.body?.name, req.body?.icon));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/switch', (req, res) => {
+    try {
+        res.json(Notebooks.open(req.body?.path));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 app.post('/api/notes', (req, res) => {
     try {
@@ -133,5 +163,5 @@ app.get('*', (req, res, next) => {
 const PORT = process.env.PORT || 3777;
 app.listen(PORT, () => {
     console.log(`[Note] serving on http://localhost:${PORT}`);
-    console.log(`  DB: ${DB_PATH}`);
+    console.log(`  DB: ${getDbPath()}`);
 });

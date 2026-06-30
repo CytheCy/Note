@@ -34,9 +34,10 @@ try {
 }
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
-const DB_PATH = process.env.NOTE_DB_PATH
+const DEFAULT_DB_PATH = process.env.NOTE_DB_PATH
     ? path.resolve(process.env.NOTE_DB_PATH)
     : path.join(DATA_DIR, 'document.db');
+const NOTEBOOKS_CONFIG_PATH = path.join(DATA_DIR, 'notebooks.json');
 const SCHEMA_PATH = path.join(__dirname, '..', 'schema.sql');
 
 // Crockford base32 — same alphabet as ULID, sorted, unambiguous (no I/L/O/U).
@@ -78,7 +79,7 @@ function normalizeIcon(icon) {
 // ---------------------------------------------------------------------------
 //  Open / migrate
 // ---------------------------------------------------------------------------
-function openDb(dbPath = DB_PATH) {
+function openDb(dbPath = DEFAULT_DB_PATH) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     const db = new Database(dbPath);
     db.pragma('journal_mode = WAL');
@@ -87,7 +88,82 @@ function openDb(dbPath = DB_PATH) {
     return db;
 }
 
-function applySchema(db) {
+function notebookNameFromPath(dbPath) {
+    const base = path.basename(dbPath, path.extname(dbPath));
+    return base
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
+        .trim() || 'Notebook';
+}
+
+function sanitizeNotebookPath(dbPath) {
+    if (!dbPath || typeof dbPath !== 'string') throw new Error('notebook path is required');
+    const resolved = path.resolve(dbPath);
+    const ext = path.extname(resolved).toLowerCase();
+    if (ext && ext !== '.db' && ext !== '.sqlite' && ext !== '.sqlite3') {
+        throw new Error('notebook file must use .db, .sqlite, or .sqlite3');
+    }
+    return resolved;
+}
+
+function readNotebookConfig() {
+    if (process.env.NOTE_DB_PATH) {
+        return {
+            currentPath: DEFAULT_DB_PATH,
+            opened: [{ path: DEFAULT_DB_PATH, name: notebookNameFromPath(DEFAULT_DB_PATH), icon: null }],
+        };
+    }
+    try {
+        const parsed = JSON.parse(fs.readFileSync(NOTEBOOKS_CONFIG_PATH, 'utf8'));
+        return {
+            currentPath: parsed.currentPath || DEFAULT_DB_PATH,
+            opened: Array.isArray(parsed.opened) ? parsed.opened : [],
+        };
+    } catch (_) {
+        return { currentPath: DEFAULT_DB_PATH, opened: [] };
+    }
+}
+
+function writeNotebookConfig(config) {
+    if (process.env.NOTE_DB_PATH) return;
+    fs.mkdirSync(path.dirname(NOTEBOOKS_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(NOTEBOOKS_CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+function normalizeOpened(opened) {
+    const seen = new Set();
+    return opened
+        .filter(item => item && item.path)
+        .map(item => ({
+            path: path.resolve(item.path),
+            name: item.name || notebookNameFromPath(item.path),
+            icon: item.icon || null,
+            lastOpened: item.lastOpened || null,
+        }))
+        .filter(item => {
+            if (seen.has(item.path)) return false;
+            seen.add(item.path);
+            return true;
+        });
+}
+
+function upsertOpenedNotebook(dbPath, meta = {}) {
+    const currentMeta = typeof meta === 'string' ? { name: meta } : meta;
+    const fileMeta = getNotebookMetaFromFile(dbPath);
+    const config = readNotebookConfig();
+    const opened = normalizeOpened(config.opened).filter(item => item.path !== dbPath);
+    opened.unshift({
+        path: dbPath,
+        name: currentMeta.name || fileMeta.name,
+        icon: currentMeta.icon === undefined ? fileMeta.icon : currentMeta.icon,
+        lastOpened: new Date().toISOString(),
+    });
+    const next = { currentPath: dbPath, opened };
+    writeNotebookConfig(next);
+    return next;
+}
+
+function applySchema(db, dbPath = DEFAULT_DB_PATH) {
     const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
     db.exec(sql);
     const noteCols = new Set(db.prepare('PRAGMA table_info(notes)').all().map(c => c.name));
@@ -103,6 +179,18 @@ function applySchema(db) {
                 WHERE noteId = NEW.noteId;
         END;
     `);
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS notebook_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+    `);
+    db.prepare(`
+        INSERT OR IGNORE INTO notebook_meta (key, value)
+        VALUES ('name', ?)`).run(notebookNameFromPath(dbPath));
+    db.prepare(`
+        INSERT OR IGNORE INTO notebook_meta (key, value)
+        VALUES ('icon', '')`).run();
 
     // Repair notes orphaned by older failed delete attempts.
     db.prepare(`
@@ -118,68 +206,129 @@ function applySchema(db) {
           )`).run({ rootId: ROOT_ID });
 }
 
-// One shared connection for the app (better-sqlite3 is sync → single conn is fine).
-const db = openDb();
-applySchema(db);
+function getNotebookMetaFromFile(dbPath) {
+    try {
+        const temp = openDb(dbPath);
+        applySchema(temp, dbPath);
+        const rows = temp.prepare("SELECT key, value FROM notebook_meta WHERE key IN ('name', 'icon')").all();
+        temp.close();
+        const meta = Object.fromEntries(rows.map(row => [row.key, row.value]));
+        return {
+            name: meta.name || notebookNameFromPath(dbPath),
+            icon: meta.icon || null,
+        };
+    } catch (_) {
+        return {
+            name: notebookNameFromPath(dbPath),
+            icon: null,
+        };
+    }
+}
 
 // ---------------------------------------------------------------------------
 //  Prepared statements (created once, reused — much faster than re-preparing)
 // ---------------------------------------------------------------------------
-const stmts = {
-    noteGet: db.prepare('SELECT * FROM notes WHERE noteId = ?'),
-    noteInsert: db.prepare(`
-        INSERT INTO notes (noteId, title, content, type, icon)
-        VALUES (@noteId, @title, @content, @type, @icon)`),
-    noteUpdate: db.prepare(`
-        UPDATE notes SET title = @title, content = @content, type = @type, icon = @icon
-        WHERE noteId = @noteId`),
-    noteSoftDelete: db.prepare(`
-        UPDATE notes SET isDeleted = 1 WHERE noteId = @noteId`),
-    noteSearch: db.prepare(`
-        SELECT noteId, title, type, icon, dateModified FROM notes
-        WHERE isDeleted = 0 AND (title LIKE @q OR content LIKE @q)
-        ORDER BY dateModified DESC LIMIT 100`),
+function createStatements(db) {
+    return {
+        noteGet: db.prepare('SELECT * FROM notes WHERE noteId = ?'),
+        noteInsert: db.prepare(`
+            INSERT INTO notes (noteId, title, content, type, icon)
+            VALUES (@noteId, @title, @content, @type, @icon)`),
+        noteUpdate: db.prepare(`
+            UPDATE notes SET title = @title, content = @content, type = @type, icon = @icon
+            WHERE noteId = @noteId`),
+        noteSoftDelete: db.prepare(`
+            UPDATE notes SET isDeleted = 1 WHERE noteId = @noteId`),
+        noteSearch: db.prepare(`
+            SELECT noteId, title, type, icon, dateModified FROM notes
+            WHERE isDeleted = 0 AND (title LIKE @q OR content LIKE @q)
+            ORDER BY dateModified DESC LIMIT 100`),
 
-    // tree
-    relChildren: db.prepare(`
-        SELECT r.relationId, r.noteId, r.sortOrder, r.isExpanded, r.prefix,
-               n.title, n.type, n.icon, n.isDeleted,
-               (SELECT COUNT(*) FROM note_relations c
-                  WHERE c.parentId = r.noteId AND c.isDeleted = 0) AS childCount
-        FROM note_relations r
-        JOIN notes n ON n.noteId = r.noteId
-        WHERE r.parentId = ? AND r.isDeleted = 0
-        ORDER BY r.sortOrder, r.relationId`),
-    relParents: db.prepare(`
-        SELECT parentId FROM note_relations
-        WHERE noteId = ? AND isDeleted = 0`),
-    relInsert: db.prepare(`
-        INSERT INTO note_relations (relationId, parentId, noteId, sortOrder, isExpanded, prefix)
-        VALUES (@relationId, @parentId, @noteId, @sortOrder, @isExpanded, @prefix)`),
-    relGet: db.prepare('SELECT * FROM note_relations WHERE relationId = ?'),
-    relDelete: db.prepare('UPDATE note_relations SET isDeleted = 1 WHERE relationId = ?'),
-    relUpdateOrder: db.prepare(`
-        UPDATE note_relations SET sortOrder = ? WHERE relationId = ?`),
-    relSetExpanded: db.prepare(`
-        UPDATE note_relations SET isExpanded = ? WHERE relationId = ?`),
-    relMaxSort: db.prepare(`
-        SELECT COALESCE(MAX(sortOrder), 0) + 1 FROM note_relations
-        WHERE parentId = ? AND isDeleted = 0`),
-};
+        // tree
+        relChildren: db.prepare(`
+            SELECT r.relationId, r.noteId, r.sortOrder, r.isExpanded, r.prefix,
+                   n.title, n.type, n.icon, n.isDeleted,
+                   (SELECT COUNT(*) FROM note_relations c
+                      WHERE c.parentId = r.noteId AND c.isDeleted = 0) AS childCount
+            FROM note_relations r
+            JOIN notes n ON n.noteId = r.noteId
+            WHERE r.parentId = ? AND r.isDeleted = 0
+            ORDER BY r.sortOrder, r.relationId`),
+        relParents: db.prepare(`
+            SELECT parentId FROM note_relations
+            WHERE noteId = ? AND isDeleted = 0`),
+        relInsert: db.prepare(`
+            INSERT INTO note_relations (relationId, parentId, noteId, sortOrder, isExpanded, prefix)
+            VALUES (@relationId, @parentId, @noteId, @sortOrder, @isExpanded, @prefix)`),
+        relGet: db.prepare('SELECT * FROM note_relations WHERE relationId = ?'),
+        relDelete: db.prepare('UPDATE note_relations SET isDeleted = 1 WHERE relationId = ?'),
+        relUpdateOrder: db.prepare(`
+            UPDATE note_relations SET sortOrder = ? WHERE relationId = ?`),
+        relSetExpanded: db.prepare(`
+            UPDATE note_relations SET isExpanded = ? WHERE relationId = ?`),
+        relMaxSort: db.prepare(`
+            SELECT COALESCE(MAX(sortOrder), 0) + 1 FROM note_relations
+            WHERE parentId = ? AND isDeleted = 0`),
+        notebookNameGet: db.prepare("SELECT value FROM notebook_meta WHERE key = 'name'"),
+        notebookNameSet: db.prepare(`
+            INSERT INTO notebook_meta (key, value)
+            VALUES ('name', @name)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
+        notebookIconGet: db.prepare("SELECT value FROM notebook_meta WHERE key = 'icon'"),
+        notebookIconSet: db.prepare(`
+            INSERT INTO notebook_meta (key, value)
+            VALUES ('icon', @icon)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value`),
+    };
+}
 
-const removeRelationTx = db.transaction((relationId) => {
-    const rel = stmts.relGet.get(relationId);
-    if (!rel || rel.isDeleted) return false;
+function createConnection(dbPath) {
+    const resolved = sanitizeNotebookPath(dbPath);
+    const db = openDb(resolved);
+    applySchema(db, resolved);
+    return {
+        db,
+        dbPath: resolved,
+        stmts: createStatements(db),
+    };
+}
 
-    stmts.relDelete.run(relationId);
-
-    const otherParents = stmts.relParents.all(rel.noteId);
-    if (otherParents.length === 0) {
-        stmts.noteSoftDelete.run({ noteId: rel.noteId });
-    }
-
-    return true;
+const initialConfig = readNotebookConfig();
+let state = createConnection(initialConfig.currentPath || DEFAULT_DB_PATH);
+upsertOpenedNotebook(state.dbPath, {
+    name: getStmts().notebookNameGet.get()?.value || notebookNameFromPath(state.dbPath),
+    icon: getStmts().notebookIconGet.get()?.value || null,
 });
+
+function getDb() {
+    return state.db;
+}
+
+function getDbPath() {
+    return state.dbPath;
+}
+
+function getStmts() {
+    return state.stmts;
+}
+
+function removeRelationTx(relationId) {
+    const db = getDb();
+    const stmts = getStmts();
+    return db.transaction((id) => {
+        const rel = stmts.relGet.get(id);
+        if (!rel || rel.isDeleted) return false;
+
+        stmts.relDelete.run(id);
+
+        const otherParents = stmts.relParents.all(rel.noteId);
+        if (otherParents.length === 0) {
+            stmts.noteSoftDelete.run({ noteId: rel.noteId });
+        }
+
+        return true;
+    })(relationId);
+}
 
 // ---------------------------------------------------------------------------
 //  Public API
@@ -188,10 +337,12 @@ const Notes = {
     ROOT_ID,
 
     get(noteId) {
-        return stmts.noteGet.get(noteId);
+        return getStmts().noteGet.get(noteId);
     },
 
     create({ title = 'Untitled', content = '', type = 'text', icon = null, parentId = ROOT_ID } = {}) {
+        const db = getDb();
+        const stmts = getStmts();
         const noteId = newId();
         const iconClass = normalizeIcon(icon);
         const tx = db.transaction((opts) => {
@@ -214,6 +365,7 @@ const Notes = {
     },
 
     update(noteId, { title, content, type, icon }) {
+        const stmts = getStmts();
         const current = this.get(noteId);
         if (!current) return null;
         stmts.noteUpdate.run({
@@ -237,14 +389,14 @@ const Notes = {
     /** Search by title/content — backs the global search box. */
     search(query) {
         if (!query?.trim()) return [];
-        return stmts.noteSearch.all({ q: `%${query}%` });
+        return getStmts().noteSearch.all({ q: `%${query}%` });
     },
 };
 
 const Tree = {
     /** Direct children of parentId, ordered, with childCount for the caret. */
     children(parentId) {
-        return stmts.relChildren.all(parentId);
+        return getStmts().relChildren.all(parentId);
     },
 
     /**
@@ -255,7 +407,7 @@ const Tree = {
     subtree(parentId, { maxDepth = 32 } = {}) {
         const build = (pid, depth, seen) => {
             if (depth > maxDepth) return [];
-            return stmts.relChildren.all(pid).map((row) => {
+            return getStmts().relChildren.all(pid).map((row) => {
                 const node = {
                     relationId: row.relationId,
                     noteId: row.noteId,
@@ -278,6 +430,8 @@ const Tree = {
 
     /** Move `relationId` under `newParentId` at `sortOrder` (drag-drop reorder/reparent). */
     move(relationId, newParentId, sortOrder = null) {
+        const db = getDb();
+        const stmts = getStmts();
         const rel = stmts.relGet.get(relationId);
         if (!rel) throw new Error('relation not found');
         if (rel.noteId === newParentId) throw new Error('cannot drop a note into itself');
@@ -294,6 +448,8 @@ const Tree = {
 
     /** Reorder siblings by passing their relationIds in desired order. */
     reorder(parentId, relationIds) {
+        const db = getDb();
+        const stmts = getStmts();
         const tx = db.transaction(() => {
             relationIds.forEach((rid, i) => {
                 stmts.relUpdateOrder.run(i, rid);
@@ -303,11 +459,12 @@ const Tree = {
     },
 
     setExpanded(relationId, isExpanded) {
-        stmts.relSetExpanded.run(isExpanded ? 1 : 0, relationId);
+        getStmts().relSetExpanded.run(isExpanded ? 1 : 0, relationId);
     },
 
     /** Clone: create a second relation pointing at the same note under newParentId. */
     clone(noteId, newParentId) {
+        const stmts = getStmts();
         if (noteId === newParentId) throw new Error('cannot clone a note into itself');
         if (this._isDescendant(noteId, newParentId)) {
             throw new Error('cannot clone a parent into its own descendant');
@@ -330,9 +487,73 @@ const Tree = {
             if (cur === candidateNoteId) return true;
             if (seen.has(cur)) continue;
             seen.add(cur);
-            for (const c of stmts.relChildren.all(cur)) stack.push(c.noteId);
+            for (const c of getStmts().relChildren.all(cur)) stack.push(c.noteId);
         }
         return false;
+    },
+};
+
+const Notebooks = {
+    current() {
+        const nameRow = getStmts().notebookNameGet.get();
+        const iconRow = getStmts().notebookIconGet.get();
+        const pathValue = getDbPath();
+        return {
+            path: pathValue,
+            name: nameRow?.value || notebookNameFromPath(pathValue),
+            icon: iconRow?.value || null,
+        };
+    },
+
+    list() {
+        const current = this.current();
+        const config = readNotebookConfig();
+        const opened = normalizeOpened(config.opened);
+        if (!opened.some(item => item.path === current.path)) {
+            opened.unshift({ path: current.path, name: current.name, lastOpened: new Date().toISOString() });
+        }
+        return {
+            current,
+            opened: opened.map(item => ({
+                ...item,
+                current: item.path === current.path,
+                name: item.path === current.path ? current.name : item.name,
+                icon: item.path === current.path ? current.icon : item.icon,
+            })),
+        };
+    },
+
+    update({ name, icon } = {}) {
+        const current = this.current();
+        const cleanName = name === undefined ? current.name : String(name || '').trim();
+        if (!cleanName) throw new Error('notebook name is required');
+        const cleanIcon = icon === undefined ? current.icon : normalizeIcon(icon);
+        getStmts().notebookNameSet.run({ name: cleanName });
+        getStmts().notebookIconSet.run({ icon: cleanIcon || '' });
+        upsertOpenedNotebook(getDbPath(), { name: cleanName, icon: cleanIcon });
+        return this.current();
+    },
+
+    rename(name) {
+        return this.update({ name });
+    },
+
+    open(dbPath, { create = false, name = null, icon = undefined } = {}) {
+        const resolved = sanitizeNotebookPath(dbPath);
+        if (!create && !fs.existsSync(resolved)) throw new Error('notebook file not found');
+        const next = createConnection(resolved);
+        const previous = state;
+        state = next;
+        try { previous.db.close(); } catch (_) {}
+        if (name || icon !== undefined) this.update({ name: name || undefined, icon });
+        upsertOpenedNotebook(state.dbPath, this.current());
+        return this.current();
+    },
+
+    create(dbPath, name = null, icon = undefined) {
+        const resolved = sanitizeNotebookPath(dbPath);
+        if (fs.existsSync(resolved)) throw new Error('notebook file already exists');
+        return this.open(resolved, { create: true, name, icon });
     },
 };
 
@@ -340,6 +561,7 @@ const Tree = {
 //  Seed data (called from CLI `npm run seed`)
 // ---------------------------------------------------------------------------
 function seed() {
+    const db = getDb();
     if (db.prepare('SELECT COUNT(*) c FROM note_relations WHERE parentId = ? AND isDeleted = 0')
         .get(ROOT_ID).c > 0) {
         console.log('[seed] document already has notes; skipping.');
@@ -371,18 +593,28 @@ if (require.main === module) {
     if (arg === '--seed') {
         seed();
     } else if (arg === '--status') {
-        const counts = db.prepare(`
+        const counts = getDb().prepare(`
             SELECT
               (SELECT COUNT(*) FROM notes WHERE isDeleted=0)         AS notes,
               (SELECT COUNT(*) FROM note_relations WHERE isDeleted=0) AS relations
         `).get();
         console.log('[status]', counts);
     } else if (arg === '--init') {
-        applySchema(db);
-        console.log('[init] schema applied at', DB_PATH);
+        applySchema(getDb(), getDbPath());
+        console.log('[init] schema applied at', getDbPath());
     } else {
         console.log('Usage: node src/db.js --init | --seed | --status');
     }
 }
 
-module.exports = { db, Notes, Tree, newId, ROOT_ID, DB_PATH };
+module.exports = {
+    db: getDb(),
+    getDb,
+    Notes,
+    Tree,
+    Notebooks,
+    newId,
+    ROOT_ID,
+    DB_PATH: getDbPath(),
+    getDbPath,
+};
