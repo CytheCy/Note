@@ -16,6 +16,7 @@ const Editor = (() => {
     const elSearchToolbar = document.getElementById('searchToolbar');
     const elSlash   = document.getElementById('slashMenu');
     const elCodeCopy = document.createElement('button');
+    const elTableToolbar = document.createElement('div');
     const elBlockHandle = document.createElement('button');
     const elBlockActions = document.createElement('div');
     const elBlockCut = document.createElement('button');
@@ -38,6 +39,7 @@ const Editor = (() => {
     let blockDropIntent = 'before';
     let blockHandleHideTimer = null;
     let selectedDividerBlock = null;
+    let activeTableCell = null;
     const boundEditorBlocks = new WeakSet();
     let codeExitArmed = false;
     let codeExitBreak = null;
@@ -66,6 +68,25 @@ const Editor = (() => {
     elCodeCopy.innerHTML = '<i class="bx bx-copy"></i>';
     elCodeCopy.hidden = true;
     document.body.appendChild(elCodeCopy);
+    elTableToolbar.id = 'tableToolbar';
+    elTableToolbar.className = 'table-toolbar';
+    elTableToolbar.hidden = true;
+    elTableToolbar.innerHTML = `
+        <button type="button" class="table-toolbar-row" data-table-action="table-row-below" title="Insert row below" aria-label="Insert row below">
+            <i class="bx bx-table"></i><i class="bx bx-plus table-toolbar-action-mark"></i>
+        </button>
+        <button type="button" class="table-toolbar-col" data-table-action="table-col-right" title="Insert column right" aria-label="Insert column right">
+            <i class="bx bx-table"></i><i class="bx bx-plus table-toolbar-action-mark"></i>
+        </button>
+        <span class="sep"></span>
+        <button type="button" class="table-toolbar-row" data-table-action="table-row-delete" title="Delete row" aria-label="Delete row">
+            <i class="bx bx-table"></i><i class="bx bx-trash table-toolbar-action-mark"></i>
+        </button>
+        <button type="button" class="table-toolbar-col" data-table-action="table-col-delete" title="Delete column" aria-label="Delete column">
+            <i class="bx bx-table"></i><i class="bx bx-trash table-toolbar-action-mark"></i>
+        </button>
+    `;
+    elToolbar.after(elTableToolbar);
     elBlockHandle.type = 'button';
     elBlockHandle.className = 'block-handle';
     elBlockHandle.title = 'Drag block';
@@ -109,6 +130,7 @@ const Editor = (() => {
         ensureEditorBlocks();
         syncToolbarVisibility();
         hideSlashMenu();
+        hideTableToolbar();
         hideBlockHandle();
         hideBlockActions();
         hideBlockDropLine();
@@ -121,6 +143,7 @@ const Editor = (() => {
         currentNote = null;
         elEmpty.hidden = false;
         elRich.hidden = true; elSettings.hidden = true; elToolbar.hidden = true;
+        hideTableToolbar();
         elTitle.disabled = true;
         elTitle.value = '';
         elIcon.className = 'bx bx-file';
@@ -175,6 +198,7 @@ const Editor = (() => {
         ensureEditorBlocks();
         scheduleSave();
         syncToolbarVisibility();
+        syncTableToolbarVisibility();
         syncDividerSelection();
     });
     elRich.addEventListener('beforeinput', (e) => {
@@ -201,6 +225,7 @@ const Editor = (() => {
     });
     elRich.addEventListener('mousedown', (e) => {
         disarmCodeExit();
+        setActiveTableCellFromTarget(e.target);
         if (!elBlockHandle.contains(e.target) && !e.target.closest?.('.editor-divider-block')) clearSelectedBlock();
     });
     elRich.addEventListener('mouseup', (e) => {
@@ -208,6 +233,7 @@ const Editor = (() => {
         if (!ensureCaretFromClick(e)) return;
         syncDividerSelection();
         syncToolbarVisibility();
+        syncTableToolbarVisibility();
     });
     elRich.addEventListener('keyup', (e) => {
         syncToolbarVisibility();
@@ -300,8 +326,10 @@ const Editor = (() => {
 
     document.addEventListener('mousedown', (e) => {
         if (!elSlash.hidden && !elSlash.contains(e.target)) hideSlashMenu();
+        if (!elTableToolbar.hidden && !elTableToolbar.contains(e.target) && !tableCellFromTarget(e.target)) hideTableToolbar();
     });
     document.addEventListener('selectionchange', syncToolbarVisibility);
+    document.addEventListener('selectionchange', syncTableToolbarVisibility);
     document.addEventListener('selectionchange', syncDividerSelection);
 
     elCodeCopy.addEventListener('mouseleave', (e) => {
@@ -313,6 +341,12 @@ const Editor = (() => {
         await copyText(hoveredCodeBlock.innerText);
         elCodeCopy.classList.add('copied');
         setTimeout(() => elCodeCopy.classList.remove('copied'), 900);
+    });
+    elTableToolbar.addEventListener('mousedown', (e) => e.preventDefault());
+    elTableToolbar.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-table-action]');
+        if (!btn) return;
+        runTableToolbarAction(btn.dataset.tableAction);
     });
     elBlockHandle.addEventListener('mouseenter', () => {
         cancelBlockHandleHide();
@@ -394,6 +428,7 @@ const Editor = (() => {
         elTitle.value = 'Settings';
         elIcon.className = 'bx bx-cog';
         hideSlashMenu();
+        hideTableToolbar();
         hideCodeCopy();
         hideBlockHandle();
         hideBlockActions();
@@ -408,6 +443,18 @@ const Editor = (() => {
 
     function syncToolbarVisibility() {
         elToolbar.hidden = !selectedTextInEditor() || elSearchToolbar?.hidden === false;
+    }
+
+    function syncTableToolbarVisibility() {
+        const cell = currentTableCell();
+        if (!cell || elSearchToolbar?.hidden === false || elSettings?.hidden === false) return hideTableToolbar();
+        activeTableCell = cell;
+        elTableToolbar.hidden = false;
+    }
+
+    function hideTableToolbar() {
+        activeTableCell = null;
+        elTableToolbar.hidden = true;
     }
 
     function selectedTextInEditor() {
@@ -719,12 +766,44 @@ const Editor = (() => {
 
     function currentTableCell() {
         const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || !elRich.contains(sel.anchorNode)) return null;
-        const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE
-            ? sel.anchorNode
-            : sel.anchorNode.parentElement;
-        const cell = node?.closest?.('td,th');
-        return cell && elRich.contains(cell) ? cell : null;
+        if (sel && sel.rangeCount && elRich.contains(sel.anchorNode)) {
+            const node = sel.anchorNode.nodeType === Node.ELEMENT_NODE
+                ? sel.anchorNode
+                : sel.anchorNode.parentElement;
+            const cell = node?.closest?.('td,th');
+            if (cell && elRich.contains(cell)) return cell;
+        }
+        return activeTableCell?.isConnected && elRich.contains(activeTableCell) ? activeTableCell : null;
+    }
+
+    function tableCellFromTarget(target) {
+        const element = target?.nodeType === Node.ELEMENT_NODE ? target : target?.parentElement;
+        const directCell = element?.closest?.('td,th');
+        if (directCell && elRich.contains(directCell)) return directCell;
+        const table = element?.closest?.('table');
+        return table && elRich.contains(table) ? table.rows[0]?.cells[0] || null : null;
+    }
+
+    function setActiveTableCellFromTarget(target) {
+        const cell = tableCellFromTarget(target);
+        if (!cell) return;
+        activeTableCell = cell;
+        elTableToolbar.hidden = false;
+    }
+
+    function removeSlashTriggerIfPresent() {
+        if (slashRange) removeSlashTrigger();
+    }
+
+    function runTableToolbarAction(id) {
+        const block = slashBlockMap.get(id);
+        if (!block || typeof block.content !== 'function') return;
+        if (!currentTableCell()) return hideTableToolbar();
+        if (!block.content()) return hideTableToolbar();
+        ensureEditorBlocks();
+        syncTableToolbarVisibility();
+        elRich.focus();
+        scheduleSave();
     }
 
     function tableRows(table) {
@@ -743,7 +822,7 @@ const Editor = (() => {
     function insertTableRowBelow() {
         const cell = currentTableCell();
         if (!cell) return false;
-        removeSlashTrigger();
+        removeSlashTriggerIfPresent();
 
         const row = cell.parentElement;
         const next = row.cloneNode(false);
@@ -756,7 +835,7 @@ const Editor = (() => {
     function insertTableColumnRight() {
         const cell = currentTableCell();
         if (!cell) return false;
-        removeSlashTrigger();
+        removeSlashTriggerIfPresent();
 
         const index = cellIndex(cell) + 1;
         tableRows(cell.closest('table')).forEach(row => {
@@ -771,7 +850,7 @@ const Editor = (() => {
     function deleteTableRow() {
         const cell = currentTableCell();
         if (!cell) return false;
-        removeSlashTrigger();
+        removeSlashTriggerIfPresent();
 
         const row = cell.parentElement;
         const table = cell.closest('table');
@@ -788,7 +867,7 @@ const Editor = (() => {
     function deleteTableColumn() {
         const cell = currentTableCell();
         if (!cell) return false;
-        removeSlashTrigger();
+        removeSlashTriggerIfPresent();
 
         const table = cell.closest('table');
         const index = cellIndex(cell);

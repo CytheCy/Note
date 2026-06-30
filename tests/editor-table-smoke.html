@@ -113,6 +113,23 @@
         });
     }
 
+    function clickElement(element) {
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + Math.min(12, Math.max(1, rect.width / 2));
+        const y = rect.top + Math.min(10, Math.max(1, rect.height / 2));
+        element.dispatchEvent(mouseEvent('mousedown', x, y));
+        element.dispatchEvent(mouseEvent('mouseup', x, y));
+        element.dispatchEvent(mouseEvent('click', x, y));
+    }
+
+    function tableToolbarButton(action) {
+        const toolbar = document.getElementById('tableToolbar');
+        assert(toolbar && !toolbar.hidden, 'table toolbar is visible');
+        const button = toolbar.querySelector(`[data-table-action="${action}"]`);
+        assert(button, `${action} toolbar button exists`);
+        return button;
+    }
+
     function assertTextBlock(block, message) {
         assert(block.classList.contains('editor-text-block'), `${message} is marked as a text block`);
         assert(getComputedStyle(block).cursor === 'text', `${message} shows the text cursor`);
@@ -312,6 +329,20 @@
         putSlashIn(editor.querySelectorAll('td')[1]);
         command('table-col-delete');
         assert(editor.querySelector('tr').cells.length === 2, 'column deleted');
+
+        editor.innerHTML = '<table><tbody><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></tbody></table><p>Outside</p>';
+        clickElement(editor.querySelector('td'));
+        assert(!document.getElementById('tableToolbar').hidden, 'clicking a table cell shows the table toolbar');
+        clickElement(tableToolbarButton('table-row-below'));
+        assert(editor.querySelectorAll('tr').length === 3, 'toolbar inserts a row below the clicked cell');
+        clickElement(tableToolbarButton('table-col-right'));
+        assert(editor.querySelector('tr').cells.length === 3, 'toolbar inserts a column right of the active cell');
+        clickElement(tableToolbarButton('table-row-delete'));
+        assert(editor.querySelectorAll('tr').length === 2, 'toolbar deletes the active row');
+        clickElement(tableToolbarButton('table-col-delete'));
+        assert(editor.querySelector('tr').cells.length === 2, 'toolbar deletes the active column');
+        clickElement(editor.querySelector('p'));
+        assert(document.getElementById('tableToolbar').hidden, 'clicking outside the table hides the table toolbar');
 
         editor.innerHTML = '<p>/</p>';
         putSlashIn(editor.querySelector('p'));
