@@ -24,7 +24,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const express = require('express');
 const cors = require('cors');
-const { Notes, Tree, Notebooks, ROOT_ID, getDbPath, getDb } = require('./db');
+const { Notes, Tree, Notebooks, AppSettings, ROOT_ID, getDbPath, getDb } = require('./db');
 
 const app = express();
 app.use(cors());
@@ -147,10 +147,29 @@ app.post('/api/notebooks/close', (req, res) => {
     } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+app.post('/api/notebooks/import/markdown', (req, res) => {
+    try {
+        res.status(201).json(Notebooks.importMarkdownFolder(req.body?.folderPath));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 app.post('/api/notebooks/current/open-folder', (_req, res) => {
     try {
         openFolderInSystemExplorer(Notebooks.current().path);
         res.json({ ok: true });
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ---------------------------------------------------------------------------
+//  Settings
+// ---------------------------------------------------------------------------
+app.get('/api/settings', (_req, res) => {
+    res.json(AppSettings.get());
+});
+
+app.put('/api/settings', (req, res) => {
+    try {
+        res.json(AppSettings.update(req.body || {}));
     } catch (e) { res.status(400).json({ error: e.message }); }
 });
 

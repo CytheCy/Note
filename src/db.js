@@ -96,6 +96,13 @@ function notebookNameFromPath(dbPath) {
         .trim() || 'Notebook';
 }
 
+function titleFromMarkdownPath(filePath) {
+    return path.basename(filePath, path.extname(filePath))
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
+        .trim() || 'Untitled';
+}
+
 function sanitizeNotebookPath(dbPath) {
     if (!dbPath || typeof dbPath !== 'string') throw new Error('notebook path is required');
     const resolved = path.resolve(dbPath);
@@ -106,11 +113,143 @@ function sanitizeNotebookPath(dbPath) {
     return resolved;
 }
 
+function normalizeNotebookFolder(folderPath) {
+    if (!folderPath || typeof folderPath !== 'string') return null;
+    const value = folderPath.trim();
+    return value ? path.resolve(value) : null;
+}
+
+function uniqueNotebookPath(folderPath, name) {
+    const safeName = (name || 'Imported Notebook')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, ' ') || 'Imported Notebook';
+    let candidate = path.join(folderPath, `${safeName}.db`);
+    let index = 2;
+    while (fs.existsSync(candidate)) {
+        candidate = path.join(folderPath, `${safeName} ${index}.db`);
+        index += 1;
+    }
+    return candidate;
+}
+
+function escapeHtmlText(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function markdownInlineToHtml(value) {
+    return escapeHtmlText(value)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+function markdownToHtml(markdown) {
+    const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+    const html = [];
+    let paragraph = [];
+    let listType = null;
+    let inCode = false;
+    let code = [];
+
+    const flushParagraph = () => {
+        if (!paragraph.length) return;
+        html.push(`<p>${markdownInlineToHtml(paragraph.join(' '))}</p>`);
+        paragraph = [];
+    };
+    const closeList = () => {
+        if (!listType) return;
+        html.push(`</${listType}>`);
+        listType = null;
+    };
+    const openList = (type) => {
+        if (listType === type) return;
+        closeList();
+        listType = type;
+        html.push(`<${type}>`);
+    };
+
+    for (const line of lines) {
+        const fence = line.match(/^```/);
+        if (fence) {
+            if (inCode) {
+                html.push(`<pre><code>${escapeHtmlText(code.join('\n'))}</code></pre>`);
+                code = [];
+                inCode = false;
+            } else {
+                flushParagraph();
+                closeList();
+                inCode = true;
+            }
+            continue;
+        }
+        if (inCode) {
+            code.push(line);
+            continue;
+        }
+
+        if (!line.trim()) {
+            flushParagraph();
+            closeList();
+            continue;
+        }
+        const heading = line.match(/^(#{1,6})\s+(.+)$/);
+        if (heading) {
+            flushParagraph();
+            closeList();
+            const level = heading[1].length;
+            html.push(`<h${level}>${markdownInlineToHtml(heading[2].trim())}</h${level}>`);
+            continue;
+        }
+        if (/^[-*_]\s*[-*_]\s*[-*_][\s\-*_]*$/.test(line.trim())) {
+            flushParagraph();
+            closeList();
+            html.push('<hr>');
+            continue;
+        }
+        const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
+        if (unordered) {
+            flushParagraph();
+            openList('ul');
+            html.push(`<li>${markdownInlineToHtml(unordered[1].trim())}</li>`);
+            continue;
+        }
+        const ordered = line.match(/^\s*\d+\.\s+(.+)$/);
+        if (ordered) {
+            flushParagraph();
+            openList('ol');
+            html.push(`<li>${markdownInlineToHtml(ordered[1].trim())}</li>`);
+            continue;
+        }
+        const quote = line.match(/^>\s?(.*)$/);
+        if (quote) {
+            flushParagraph();
+            closeList();
+            html.push(`<blockquote>${markdownInlineToHtml(quote[1].trim())}</blockquote>`);
+            continue;
+        }
+        paragraph.push(line.trim());
+    }
+
+    if (inCode) html.push(`<pre><code>${escapeHtmlText(code.join('\n'))}</code></pre>`);
+    flushParagraph();
+    closeList();
+    html.push('<p><br></p>');
+    return html.join('\n') || '<p><br></p>';
+}
+
 function readNotebookConfig() {
     if (process.env.NOTE_DB_PATH) {
         return {
             currentPath: DEFAULT_DB_PATH,
             opened: [{ path: DEFAULT_DB_PATH, name: notebookNameFromPath(DEFAULT_DB_PATH), icon: null }],
+            defaultNotebookFolder: path.dirname(DEFAULT_DB_PATH),
         };
     }
     try {
@@ -118,9 +257,10 @@ function readNotebookConfig() {
         return {
             currentPath: parsed.currentPath || DEFAULT_DB_PATH,
             opened: Array.isArray(parsed.opened) ? parsed.opened : [],
+            defaultNotebookFolder: normalizeNotebookFolder(parsed.defaultNotebookFolder),
         };
     } catch (_) {
-        return { currentPath: DEFAULT_DB_PATH, opened: [] };
+        return { currentPath: DEFAULT_DB_PATH, opened: [], defaultNotebookFolder: null };
     }
 }
 
@@ -158,7 +298,7 @@ function upsertOpenedNotebook(dbPath, meta = {}) {
         icon: currentMeta.icon === undefined ? fileMeta.icon : currentMeta.icon,
         lastOpened: new Date().toISOString(),
     });
-    const next = { currentPath: dbPath, opened };
+    const next = { ...config, currentPath: dbPath, opened };
     writeNotebookConfig(next);
     return next;
 }
@@ -169,10 +309,11 @@ function removeOpenedNotebook(dbPath) {
     const opened = normalizeOpened(config.opened);
     const remaining = opened.filter(item => item.path !== resolved);
     if (remaining.length === opened.length) {
-        return { currentPath: getDbPath(), opened };
+        return { ...config, currentPath: getDbPath(), opened };
     }
-    writeNotebookConfig({ currentPath: getDbPath(), opened: remaining });
-    return { currentPath: getDbPath(), opened: remaining };
+    const next = { ...config, currentPath: getDbPath(), opened: remaining };
+    writeNotebookConfig(next);
+    return next;
 }
 
 function applySchema(db, dbPath = DEFAULT_DB_PATH) {
@@ -340,6 +481,92 @@ function removeRelationTx(relationId) {
 
         return true;
     })(relationId);
+}
+
+function readMarkdownImportTree(folderPath) {
+    const root = path.resolve(folderPath);
+    const stat = fs.statSync(root);
+    if (!stat.isDirectory()) throw new Error('markdown import source must be a folder');
+
+    const readDir = (dirPath) => {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+            .filter(entry => !entry.name.startsWith('.'))
+            .sort((a, b) => {
+                if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+                return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+            });
+        const dirs = [];
+        const files = [];
+        for (const entry of entries) {
+            const entryPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                const child = readDir(entryPath);
+                if (child.dirs.length || child.files.length) dirs.push(child);
+            } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.md') {
+                files.push({
+                    path: entryPath,
+                    title: titleFromMarkdownPath(entryPath),
+                    content: fs.readFileSync(entryPath, 'utf8'),
+                });
+            }
+        }
+        return {
+            path: dirPath,
+            title: titleFromMarkdownPath(dirPath),
+            dirs,
+            files,
+        };
+    };
+
+    const tree = readDir(root);
+    const countFiles = (node) => node.files.length + node.dirs.reduce((sum, child) => sum + countFiles(child), 0);
+    const markdownCount = countFiles(tree);
+    if (!markdownCount) throw new Error('no markdown files found in selected folder');
+    return { root, tree, markdownCount };
+}
+
+function insertImportedNote(stmts, { title, content, parentId, icon = null }) {
+    const noteId = newId();
+    stmts.noteInsert.run({
+        noteId,
+        title,
+        content,
+        type: 'text',
+        icon: normalizeIcon(icon),
+    });
+    const sortOrder = stmts.relMaxSort.get(parentId)['COALESCE(MAX(sortOrder), 0) + 1'];
+    stmts.relInsert.run({
+        relationId: newId(),
+        parentId,
+        noteId,
+        sortOrder,
+        isExpanded: 1,
+        prefix: null,
+    });
+    return noteId;
+}
+
+function importMarkdownTree(tree, parentId, counters) {
+    const stmts = getStmts();
+    for (const dir of tree.dirs) {
+        const dirNoteId = insertImportedNote(stmts, {
+            title: dir.title,
+            content: '<p><br></p>',
+            parentId,
+            icon: 'bx bx-folder',
+        });
+        counters.folders += 1;
+        importMarkdownTree(dir, dirNoteId, counters);
+    }
+    for (const file of tree.files) {
+        insertImportedNote(stmts, {
+            title: file.title,
+            content: markdownToHtml(file.content),
+            parentId,
+            icon: 'bx bx-text',
+        });
+        counters.files += 1;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +814,62 @@ const Notebooks = {
         }
         return this.list();
     },
+
+    importMarkdownFolder(folderPath) {
+        const source = readMarkdownImportTree(folderPath);
+        const config = readNotebookConfig();
+        const defaultFolder = config.defaultNotebookFolder || path.dirname(getDbPath());
+        fs.mkdirSync(defaultFolder, { recursive: true });
+
+        const notebookName = titleFromMarkdownPath(source.root);
+        const dbPath = uniqueNotebookPath(defaultFolder, notebookName);
+        const previous = state;
+        const next = createConnection(dbPath);
+        const counters = { files: 0, folders: 0 };
+
+        state = next;
+        try {
+            const stmts = getStmts();
+            stmts.notebookNameSet.run({ name: notebookName });
+            stmts.notebookIconSet.run({ icon: 'bx bx-import' });
+            getDb().transaction(() => {
+                importMarkdownTree(source.tree, ROOT_ID, counters);
+            })();
+            upsertOpenedNotebook(state.dbPath, this.current());
+            try { previous.db.close(); } catch (_) {}
+            return {
+                current: this.current(),
+                opened: this.list().opened,
+                imported: counters,
+            };
+        } catch (err) {
+            try { next.db.close(); } catch (_) {}
+            state = previous;
+            for (const suffix of ['', '-wal', '-shm']) {
+                try { fs.unlinkSync(dbPath + suffix); } catch (_) {}
+            }
+            throw err;
+        }
+    },
+};
+
+const AppSettings = {
+    get() {
+        const config = readNotebookConfig();
+        return {
+            defaultNotebookFolder: config.defaultNotebookFolder || path.dirname(getDbPath()),
+        };
+    },
+
+    update({ defaultNotebookFolder } = {}) {
+        const config = readNotebookConfig();
+        const folder = defaultNotebookFolder === undefined
+            ? config.defaultNotebookFolder
+            : normalizeNotebookFolder(defaultNotebookFolder);
+        if (!folder) throw new Error('default notebooks folder is required');
+        writeNotebookConfig({ ...config, defaultNotebookFolder: folder });
+        return this.get();
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -645,6 +928,7 @@ module.exports = {
     Notes,
     Tree,
     Notebooks,
+    AppSettings,
     newId,
     ROOT_ID,
     DB_PATH: getDbPath(),

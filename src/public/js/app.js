@@ -3,6 +3,7 @@
  * Also wires up: sidebar resize, global search, top-bar buttons, modal close.
  */
 let lastNotebookState = null;
+let appSettings = null;
 let selectedNotebookIcon = 'bx bx-book-open';
 let notebookIconChoicesPromise = null;
 const NOTEBOOK_BOXICONS_CSS = 'https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css';
@@ -265,6 +266,7 @@ function applyTheme(value) {
 
 function openSettings() {
     applyTheme(getStoredTheme());   // refresh selected highlight
+    loadSettings().catch(e => alert('Settings failed to load: ' + e.message));
     Editor.showSettings().catch(e => alert('Action failed: ' + e.message));
 }
 
@@ -278,6 +280,62 @@ function initSettings() {
         if (!opt) return;
         applyTheme(opt.dataset.value);
     });
+
+    document.querySelector('.settings-categories').addEventListener('click', (e) => {
+        const button = e.target.closest('button[data-settings-category]');
+        if (!button) return;
+        selectSettingsCategory(button.dataset.settingsCategory);
+    });
+
+    const defaultFolderInput = document.getElementById('defaultNotebookFolder');
+    const chooseDefaultFolderBtn = document.getElementById('chooseDefaultNotebookFolderBtn');
+    defaultFolderInput.addEventListener('change', () => {
+        saveDefaultNotebookFolder(defaultFolderInput.value).catch(err => {
+            alert('Default notebooks folder failed to save: ' + err.message);
+        });
+    });
+    chooseDefaultFolderBtn.addEventListener('click', async () => {
+        const folder = await chooseNotebookFolder();
+        if (!folder) return;
+        defaultFolderInput.value = folder;
+        await saveDefaultNotebookFolder(folder).catch(err => {
+            alert('Default notebooks folder failed to save: ' + err.message);
+        });
+    });
+
+    document.querySelector('[data-settings-section="data"]').addEventListener('click', async (e) => {
+        const importButton = e.target.closest('button[data-import-type]');
+        if (!importButton) return;
+        try {
+            await runNotebookImport(importButton.dataset.importType);
+        } catch (err) {
+            alert('Notebook import failed: ' + err.message);
+        }
+    });
+}
+
+function selectSettingsCategory(category) {
+    const value = category || 'appearance';
+    document.querySelectorAll('.settings-category[data-settings-category]').forEach(button => {
+        button.classList.toggle('active', button.dataset.settingsCategory === value);
+    });
+    document.querySelectorAll('.settings-section[data-settings-section]').forEach(section => {
+        section.hidden = section.dataset.settingsSection !== value;
+    });
+}
+
+async function loadSettings() {
+    appSettings = await Api.getSettings();
+    const input = document.getElementById('defaultNotebookFolder');
+    if (input) input.value = appSettings.defaultNotebookFolder || '';
+    return appSettings;
+}
+
+async function saveDefaultNotebookFolder(folder) {
+    appSettings = await Api.updateSettings({ defaultNotebookFolder: folder });
+    const input = document.getElementById('defaultNotebookFolder');
+    if (input) input.value = appSettings.defaultNotebookFolder || '';
+    return appSettings;
 }
 
 // ============================== NOTEBOOKS =================================
@@ -420,6 +478,25 @@ async function runNotebookAction(action) {
             break;
         }
     }
+}
+
+async function runNotebookImport(type) {
+    if (type === 'markdown') {
+        const folderPath = await chooseNotebookFolder();
+        if (!folderPath) return;
+        const result = await Api.importMarkdownNotebook({ folderPath });
+        await afterNotebookChanged();
+        alert(`Imported ${result.imported.files} markdown file${result.imported.files === 1 ? '' : 's'} into ${result.current.name}.`);
+        return;
+    }
+
+    const labels = {
+        html: 'HTML',
+        markdown: 'Markdown',
+        pdf: 'PDF',
+    };
+    const label = labels[type] || 'Notebook';
+    alert(`${label} notebook import is not implemented yet.`);
 }
 
 function initEditNotebookPanel() {
@@ -591,7 +668,14 @@ function showCreateNotebookPanel() {
     const iconSearch = document.getElementById('createNotebookIconSearch');
     hideEditNotebookPanel();
     nameInput.value = 'Untitled Notebook';
-    folderInput.value = dirnameFromPath(lastNotebookState?.current?.path || '') || '';
+    const initialFolder = appSettings?.defaultNotebookFolder || dirnameFromPath(lastNotebookState?.current?.path || '') || '';
+    folderInput.value = initialFolder;
+    loadSettings().then(settings => {
+        if (folderInput.value === initialFolder) {
+            folderInput.value = settings.defaultNotebookFolder || '';
+            updateCreateNotebookPath();
+        }
+    }).catch(() => {});
     iconSearch.value = '';
     selectNotebookIcon('bx bx-book-open', 'createNotebookIcons');
     renderNotebookIconOptions(selectedNotebookIcon, '', 'createNotebookIcons');

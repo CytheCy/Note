@@ -1378,10 +1378,14 @@ const Editor = (() => {
 
     function caretRangeFromPoint(clientX, clientY) {
         const domRange = document.caretRangeFromPoint?.(clientX, clientY);
-        if (domRange && elRich.contains(domRange.startContainer)) return domRange;
+        if (domRange && elRich.contains(domRange.startContainer)) {
+            if (domRange.startContainer === elRich) return null;
+            return domRange;
+        }
 
         const position = document.caretPositionFromPoint?.(clientX, clientY);
         if (!position || !elRich.contains(position.offsetNode)) return null;
+        if (position.offsetNode === elRich) return null;
 
         const range = document.createRange();
         range.setStart(position.offsetNode, position.offset);
@@ -1394,6 +1398,13 @@ const Editor = (() => {
         if (!block) return null;
 
         const rect = block.getBoundingClientRect();
+        if (clientY > rect.bottom && block === elRich.lastElementChild) {
+            const paragraph = document.createElement('p');
+            paragraph.innerHTML = '<br>';
+            elRich.append(paragraph);
+            ensureEditorBlocks();
+            return collapsedRangeAtBlockBoundary(paragraph, 'start');
+        }
         if (clientY > rect.bottom) return collapsedRangeAtBlockBoundary(block, 'end');
         if (clientY < rect.top) return collapsedRangeAtBlockBoundary(block, 'start');
         return collapsedRangeAtBlockBoundary(block, clientX <= rect.left + rect.width / 2 ? 'start' : 'end');

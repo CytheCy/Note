@@ -37,6 +37,10 @@ const Api = {
     // search
     search:       (q)          => Api._req('GET',    `/search?q=${encodeURIComponent(q)}`),
 
+    // settings
+    getSettings:       ()       => Api._req('GET',    '/settings'),
+    updateSettings:    (b)      => Api._req('PUT',    '/settings', b),
+
     // notebooks
     getNotebooks:      ()       => Api._req('GET',    '/notebooks'),
     renameNotebook:    (b)      => Api._req('PUT',    '/notebooks/current', b),
@@ -44,5 +48,6 @@ const Api = {
     createNotebook:    (b)      => Api._req('POST',   '/notebooks/create', b),
     switchNotebook:    (b)      => Api._req('POST',   '/notebooks/switch', b),
     closeNotebook:     (b)      => Api._req('POST',   '/notebooks/close', b),
+    importMarkdownNotebook:(b)  => Api._req('POST',   '/notebooks/import/markdown', b),
     openNotebookFolder:()       => Api._req('POST',   '/notebooks/current/open-folder'),
 };

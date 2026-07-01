@@ -35,6 +35,9 @@
                     <i class="bx bx-chevron-down"></i>
                 </button>
                 <div id="notebookMenu" class="notebook-menu" hidden>
+                    <div class="notebook-menu-section">Opened Notebooks</div>
+                    <div id="openedNotebookList" class="opened-notebook-list"></div>
+                    <div class="ctx-sep"></div>
                     <button data-action="edit-notebook" type="button"><i class="bx bx-edit-alt"></i> Edit Current Notebook</button>
                     <button data-action="open-notebook" type="button"><i class="bx bx-folder-open"></i> Open Another Notebook</button>
                     <button data-action="create-notebook" type="button"><i class="bx bx-book-add"></i> Create New Notebook</button>
@@ -86,9 +89,6 @@
                             <button class="primary" type="submit">Create</button>
                         </div>
                     </form>
-                    <div class="ctx-sep"></div>
-                    <div class="notebook-menu-section">Opened Notebooks</div>
-                    <div id="openedNotebookList" class="opened-notebook-list"></div>
                 </div>
             </div>
             <div id="tree" class="tree" role="tree">
@@ -134,21 +134,25 @@
                 <div id="richTextEditor" class="rich-text-editor" contenteditable="true" hidden></div>
                 <div id="settingsPage" class="settings-page" hidden>
                     <nav class="settings-categories" aria-label="Settings categories">
-                        <button class="settings-category active" type="button">
+                        <button class="settings-category active" type="button" data-settings-category="appearance">
                             <i class="bx bx-palette"></i>
                             <span>Appearance</span>
                         </button>
-                        <button class="settings-category" type="button">
+                        <button class="settings-category" type="button" data-settings-category="data">
+                            <i class="bx bx-data"></i>
+                            <span>Data</span>
+                        </button>
+                        <button class="settings-category" type="button" data-settings-category="hotkeys">
                             <i class="bx bx-command"></i>
                             <span>Hotkeys</span>
                         </button>
-                        <button class="settings-category" type="button">
+                        <button class="settings-category" type="button" data-settings-category="about">
                             <i class="bx bx-info-circle"></i>
                             <span>About</span>
                         </button>
                     </nav>
                     <div class="settings-content">
-                        <section class="settings-section">
+                        <section class="settings-section" data-settings-section="appearance">
                             <h2>Appearance</h2>
                             <div class="settings-row">
                                 <label for="themeAuto">Theme</label>
@@ -171,7 +175,39 @@
                                 </div>
                             </div>
                         </section>
-                        <section class="settings-section">
+                        <section class="settings-section" data-settings-section="data" hidden>
+                            <h2>Data</h2>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label for="defaultNotebookFolder">Default Notebooks Folder</label>
+                                    <span class="settings-help">New notebooks will use this folder unless you choose another folder.</span>
+                                </div>
+                                <div class="settings-folder-control">
+                                    <input id="defaultNotebookFolder" type="text" autocomplete="off" />
+                                    <button id="chooseDefaultNotebookFolderBtn" type="button" title="Choose folder" aria-label="Choose default notebooks folder">
+                                        <i class="bx bx-folder-open"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Import Notebook</label>
+                                </div>
+                                <div class="settings-import-control notebook-submenu">
+                                    <button class="notebook-submenu-trigger" type="button" aria-haspopup="menu">
+                                        <i class="bx bx-import"></i>
+                                        <span>Import Notebook</span>
+                                        <i class="bx bx-chevron-right"></i>
+                                    </button>
+                                    <div class="notebook-submenu-menu" role="menu" aria-label="Import notebook from">
+                                        <button data-import-type="html" type="button" role="menuitem"><i class="bx bx-code-alt"></i> HTML</button>
+                                        <button data-import-type="markdown" type="button" role="menuitem"><i class="bx bx-text"></i> Markdown</button>
+                                        <button data-import-type="pdf" type="button" role="menuitem"><i class="bx bxs-file-pdf"></i> PDF</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="settings-section" data-settings-section="hotkeys" hidden>
                             <h2>Hotkeys</h2>
                             <div class="settings-row settings-row-stack">
                                 <div class="settings-copy">
@@ -263,7 +299,7 @@
                                 </div>
                             </div>
                         </section>
-                        <section class="settings-section">
+                        <section class="settings-section" data-settings-section="about" hidden>
                             <h2>About</h2>
                             <div class="settings-row">
                                 <span>This note taking app is vibe coded by Cy Porter of the podcast In20xx Sci Fi and Futurism. If you like emerging tech and speculative fiction check it out! in20xx.com</span>
