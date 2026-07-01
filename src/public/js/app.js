@@ -285,6 +285,7 @@ async function initNotebooks() {
     const button = document.getElementById('notebookMenuButton');
     const menu = document.getElementById('notebookMenu');
     initCreateNotebookPanel();
+    initEditNotebookPanel();
 
     button.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -294,10 +295,22 @@ async function initNotebooks() {
     menu.addEventListener('click', async (e) => {
         e.stopPropagation();
         const actionButton = e.target.closest('button[data-action]');
+        const closeButton = e.target.closest('button[data-notebook-close]');
         const notebookButton = e.target.closest('button[data-notebook-index]');
 
         try {
-            if (actionButton) {
+            if (closeButton) {
+                const path = closeButton.dataset.path;
+                const wasCurrent = closeButton.dataset.current === 'true';
+                if (path) {
+                    await Api.closeNotebook({ path });
+                    if (wasCurrent) {
+                        await afterNotebookChanged();
+                    } else {
+                        await refreshNotebooks();
+                    }
+                }
+            } else if (actionButton) {
                 await runNotebookAction(actionButton.dataset.action);
             } else if (notebookButton) {
                 const path = notebookButton.dataset.path;
@@ -338,6 +351,7 @@ function closeNotebookMenu() {
     document.getElementById('notebookMenu').hidden = true;
     document.getElementById('notebookMenuButton').setAttribute('aria-expanded', 'false');
     hideCreateNotebookPanel();
+    hideEditNotebookPanel();
 }
 
 async function refreshNotebooks() {
@@ -354,16 +368,30 @@ async function refreshNotebooks() {
         list.innerHTML = '<div class="tree-empty">No opened notebooks.</div>';
         return;
     }
-    list.innerHTML = opened.map((notebook, index) => `
-        <button type="button"
-                data-notebook-index="${index}"
-                data-path="${escapeAttr(notebook.path)}"
-                data-current="${notebook.current ? 'true' : 'false'}"
-                class="${notebook.current ? 'current' : ''}"
-                title="${escapeAttr(notebook.path)}">
-            <i class="${notebook.current ? 'bx bx-check' : escapeAttr(notebook.icon || 'bx bx-book')}"></i>
-            <span>${escapeHtml(notebook.name || 'Notebook')}</span>
-        </button>`).join('');
+    list.innerHTML = opened.map((notebook, index) => {
+        const name = notebook.name || 'Notebook';
+        const path = notebook.path || '';
+        return `
+            <div class="opened-notebook-row ${notebook.current ? 'current' : ''}" title="${escapeAttr(path)}">
+                <button type="button"
+                        class="opened-notebook-switch"
+                        data-notebook-index="${index}"
+                        data-path="${escapeAttr(path)}"
+                        data-current="${notebook.current ? 'true' : 'false'}">
+                    <i class="${notebook.current ? 'bx bx-check' : escapeAttr(notebook.icon || 'bx bx-book')}"></i>
+                    <span>${escapeHtml(name)}</span>
+                </button>
+                <button type="button"
+                        class="opened-notebook-close"
+                        data-notebook-close="${index}"
+                        data-path="${escapeAttr(path)}"
+                        data-current="${notebook.current ? 'true' : 'false'}"
+                        aria-label="Close ${escapeAttr(name)}"
+                        title="Close notebook">
+                    <i class="bx bx-x"></i>
+                </button>
+            </div>`;
+    }).join('');
 }
 
 function showNotebookLoadError(err) {
@@ -377,12 +405,7 @@ function showNotebookLoadError(err) {
 async function runNotebookAction(action) {
     switch (action) {
         case 'edit-notebook': {
-            const state = await Api.getNotebooks();
-            const currentName = state.current?.name || '';
-            const name = prompt('Notebook name:', currentName);
-            if (name == null) return;
-            await Api.renameNotebook({ name });
-            await refreshNotebooks();
+            await showEditNotebookPanel();
             break;
         }
         case 'open-notebook': {
@@ -396,6 +419,95 @@ async function runNotebookAction(action) {
             showCreateNotebookPanel();
             break;
         }
+    }
+}
+
+function initEditNotebookPanel() {
+    const panel = document.getElementById('editNotebookPanel');
+    const nameInput = document.getElementById('editNotebookName');
+    const cancelBtn = document.getElementById('cancelEditNotebookBtn');
+    const openFolderBtn = document.getElementById('openCurrentNotebookFolderBtn');
+    const iconsEl = document.getElementById('editNotebookIcons');
+    const iconSearch = document.getElementById('editNotebookIconSearch');
+
+    panel.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') e.stopPropagation();
+    });
+    iconSearch.addEventListener('input', () => renderNotebookIconOptions(selectedNotebookIcon, iconSearch.value, 'editNotebookIcons'));
+    cancelBtn.addEventListener('click', hideEditNotebookPanel);
+    openFolderBtn.addEventListener('click', openCurrentNotebookFolder);
+    iconsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-icon]');
+        if (!btn) return;
+        selectNotebookIcon(btn.dataset.icon, 'editNotebookIcons');
+    });
+    panel.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            const name = nameInput.value.trim();
+            if (!name) return alert('Notebook name is required.');
+            await Api.renameNotebook({ name, icon: selectedNotebookIcon || 'bx bx-book-open' });
+            await refreshNotebooks();
+            closeNotebookMenu();
+        } catch (err) {
+            alert('Edit notebook failed: ' + err.message);
+        }
+    });
+}
+
+async function showEditNotebookPanel() {
+    const state = await Api.getNotebooks();
+    lastNotebookState = state;
+    const current = state.current || {};
+    const panel = document.getElementById('editNotebookPanel');
+    const nameInput = document.getElementById('editNotebookName');
+    const sourceFile = document.getElementById('editNotebookSourceFile');
+    const iconSearch = document.getElementById('editNotebookIconSearch');
+
+    nameInput.value = current.name || 'Notebook';
+    sourceFile.textContent = filenameFromPath(current.path || '') || 'Unknown source file';
+    sourceFile.title = current.path || '';
+    iconSearch.value = '';
+    selectNotebookIcon(current.icon || 'bx bx-book-open', 'editNotebookIcons');
+    renderNotebookIconOptions(selectedNotebookIcon, '', 'editNotebookIcons');
+    hideCreateNotebookPanel();
+    panel.hidden = false;
+    requestAnimationFrame(() => {
+        nameInput.focus();
+        nameInput.select();
+    });
+}
+
+function hideEditNotebookPanel() {
+    const panel = document.getElementById('editNotebookPanel');
+    if (panel) panel.hidden = true;
+}
+
+async function openCurrentNotebookFolder() {
+    try {
+        const state = lastNotebookState || await Api.getNotebooks();
+        const notebookPath = state.current?.path || '';
+        if (!notebookPath) return alert('Notebook path is not available.');
+
+        const api = window.electronAPI;
+        if (api && typeof api.openNotebookFolder === 'function') {
+            try {
+                await api.openNotebookFolder(notebookPath);
+                return;
+            } catch (err) {
+                if (!/No handler registered/i.test(err.message || '')) throw err;
+            }
+        }
+
+        if (typeof Api.openNotebookFolder === 'function') {
+            await Api.openNotebookFolder();
+            return;
+        }
+
+        const folder = dirnameFromPath(notebookPath);
+        alert(folder ? `Notebook folder:\n${folder}` : `Notebook path:\n${notebookPath}`);
+    } catch (err) {
+        alert('Open notebook folder failed: ' + err.message);
     }
 }
 
@@ -439,7 +551,7 @@ function initCreateNotebookPanel() {
     });
     nameInput.addEventListener('input', updateCreateNotebookPath);
     folderInput.addEventListener('input', updateCreateNotebookPath);
-    iconSearch.addEventListener('input', () => renderNotebookIconOptions(selectedNotebookIcon, iconSearch.value));
+    iconSearch.addEventListener('input', () => renderNotebookIconOptions(selectedNotebookIcon, iconSearch.value, 'createNotebookIcons'));
     chooseFolderBtn.addEventListener('click', async () => {
         const folder = await chooseNotebookFolder();
         if (!folder) return;
@@ -450,7 +562,7 @@ function initCreateNotebookPanel() {
     iconsEl.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-icon]');
         if (!btn) return;
-        selectNotebookIcon(btn.dataset.icon);
+        selectNotebookIcon(btn.dataset.icon, 'createNotebookIcons');
     });
     panel.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -477,11 +589,12 @@ function showCreateNotebookPanel() {
     const nameInput = document.getElementById('createNotebookName');
     const folderInput = document.getElementById('createNotebookFolder');
     const iconSearch = document.getElementById('createNotebookIconSearch');
+    hideEditNotebookPanel();
     nameInput.value = 'Untitled Notebook';
     folderInput.value = dirnameFromPath(lastNotebookState?.current?.path || '') || '';
     iconSearch.value = '';
-    selectNotebookIcon('bx bx-book-open');
-    renderNotebookIconOptions(selectedNotebookIcon);
+    selectNotebookIcon('bx bx-book-open', 'createNotebookIcons');
+    renderNotebookIconOptions(selectedNotebookIcon, '', 'createNotebookIcons');
     updateCreateNotebookPath();
     panel.hidden = false;
     requestAnimationFrame(() => {
@@ -495,8 +608,8 @@ function hideCreateNotebookPanel() {
     if (panel) panel.hidden = true;
 }
 
-function renderNotebookIconOptions(selectedIcon, filter = '') {
-    const iconsEl = document.getElementById('createNotebookIcons');
+function renderNotebookIconOptions(selectedIcon, filter = '', targetId = 'createNotebookIcons') {
+    const iconsEl = document.getElementById(targetId);
     iconsEl.innerHTML = '<div class="empty">Loading icons...</div>';
     loadNotebookIconChoices().then(icons => {
         const q = filter.trim().toLowerCase();
@@ -510,9 +623,12 @@ function renderNotebookIconOptions(selectedIcon, filter = '') {
     });
 }
 
-function selectNotebookIcon(icon) {
+function selectNotebookIcon(icon, targetId) {
     selectedNotebookIcon = icon || 'bx bx-book-open';
-    document.querySelectorAll('#createNotebookIcons button[data-icon]').forEach(btn => {
+    const selector = targetId
+        ? `#${targetId} button[data-icon]`
+        : '#createNotebookIcons button[data-icon], #editNotebookIcons button[data-icon]';
+    document.querySelectorAll(selector).forEach(btn => {
         btn.classList.toggle('selected', btn.dataset.icon === selectedNotebookIcon);
     });
 }
@@ -563,6 +679,11 @@ function safeNotebookFilename(name) {
 function dirnameFromPath(value) {
     const index = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
     return index > 0 ? value.slice(0, index) : '';
+}
+
+function filenameFromPath(value) {
+    const index = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+    return index >= 0 ? value.slice(index + 1) : value;
 }
 
 async function afterNotebookChanged() {

@@ -216,6 +216,37 @@ button { font-family: inherit; cursor: pointer; }
     max-height: 180px;
     overflow: auto;
 }
+.opened-notebook-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 4px;
+}
+.opened-notebook-row.current {
+    background: var(--sidebar-active);
+}
+.notebook-menu button.opened-notebook-switch {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.notebook-menu button.opened-notebook-switch:hover {
+    background: var(--sidebar-hover);
+}
+.notebook-menu button.opened-notebook-close {
+    flex: 0 0 28px;
+    width: 28px;
+    min-height: 28px;
+    padding: 0;
+    justify-content: center;
+    color: var(--text-muted);
+}
+.notebook-menu button.opened-notebook-close:hover {
+    color: var(--danger, #b42318);
+    background: var(--sidebar-hover);
+}
+.notebook-menu button.opened-notebook-close .bx {
+    font-size: 17px;
+}
 .create-notebook-panel {
     display: flex;
     flex-direction: column;
@@ -251,6 +282,29 @@ button { font-family: inherit; cursor: pointer; }
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.notebook-source-file {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.notebook-source-file div {
+    min-height: 30px;
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--surface-alt);
+    color: var(--text);
+    font-size: 13px;
+    text-transform: none;
+    letter-spacing: 0;
 }
 .notebook-icon-options {
     display: grid;
@@ -293,6 +347,16 @@ button { font-family: inherit; cursor: pointer; }
     padding: 0;
     border: 1px solid var(--border);
     background: var(--surface-alt);
+}
+.notebook-menu .create-notebook-panel .notebook-panel-command {
+    width: 100%;
+    min-height: 30px;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    justify-content: flex-start;
+}
+.notebook-menu .create-notebook-panel .notebook-panel-command:hover {
+    background: var(--sidebar-hover);
 }
 .notebook-create-preview {
     min-height: 16px;

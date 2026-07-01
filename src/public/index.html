@@ -38,6 +38,29 @@
                     <button data-action="edit-notebook" type="button"><i class="bx bx-edit-alt"></i> Edit Current Notebook</button>
                     <button data-action="open-notebook" type="button"><i class="bx bx-folder-open"></i> Open Another Notebook</button>
                     <button data-action="create-notebook" type="button"><i class="bx bx-book-add"></i> Create New Notebook</button>
+                    <form id="editNotebookPanel" class="create-notebook-panel" hidden>
+                        <label>
+                            <span>Name</span>
+                            <input id="editNotebookName" type="text" autocomplete="off" />
+                        </label>
+                        <div class="notebook-source-file">
+                            <span>Source File</span>
+                            <div id="editNotebookSourceFile"></div>
+                        </div>
+                        <label>
+                            <span>Icon</span>
+                            <input id="editNotebookIconSearch" type="search" placeholder="Search icons" autocomplete="off" />
+                            <div id="editNotebookIcons" class="notebook-icon-options" role="radiogroup" aria-label="Notebook icon"></div>
+                        </label>
+                        <button id="openCurrentNotebookFolderBtn" class="notebook-panel-command" type="button">
+                            <i class="bx bx-folder-open"></i>
+                            <span>Open Notebook Folder</span>
+                        </button>
+                        <div class="notebook-create-actions">
+                            <button id="cancelEditNotebookBtn" type="button">Cancel</button>
+                            <button class="primary" type="submit">Save</button>
+                        </div>
+                    </form>
                     <form id="createNotebookPanel" class="create-notebook-panel" hidden>
                         <label>
                             <span>Name</span>

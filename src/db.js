@@ -163,6 +163,18 @@ function upsertOpenedNotebook(dbPath, meta = {}) {
     return next;
 }
 
+function removeOpenedNotebook(dbPath) {
+    const resolved = sanitizeNotebookPath(dbPath);
+    const config = readNotebookConfig();
+    const opened = normalizeOpened(config.opened);
+    const remaining = opened.filter(item => item.path !== resolved);
+    if (remaining.length === opened.length) {
+        return { currentPath: getDbPath(), opened };
+    }
+    writeNotebookConfig({ currentPath: getDbPath(), opened: remaining });
+    return { currentPath: getDbPath(), opened: remaining };
+}
+
 function applySchema(db, dbPath = DEFAULT_DB_PATH) {
     const sql = fs.readFileSync(SCHEMA_PATH, 'utf8');
     db.exec(sql);
@@ -554,6 +566,26 @@ const Notebooks = {
         const resolved = sanitizeNotebookPath(dbPath);
         if (fs.existsSync(resolved)) throw new Error('notebook file already exists');
         return this.open(resolved, { create: true, name, icon });
+    },
+
+    close(dbPath) {
+        const resolved = sanitizeNotebookPath(dbPath);
+        const currentPath = getDbPath();
+        const config = readNotebookConfig();
+        const opened = normalizeOpened(config.opened);
+        if (!opened.some(item => item.path === resolved)) {
+            return this.list();
+        }
+        if (opened.length <= 1) {
+            throw new Error('cannot close the only opened notebook');
+        }
+
+        const remaining = removeOpenedNotebook(resolved).opened;
+        if (resolved === currentPath) {
+            this.open(remaining[0].path);
+            return this.list();
+        }
+        return this.list();
     },
 };
 

@@ -54,6 +54,18 @@ ipcMain.handle('dialog:choose-notebook-folder', async () => {
     return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle('shell:open-notebook-folder', async (_event, notebookPath) => {
+    if (!notebookPath || typeof notebookPath !== 'string') {
+        throw new Error('notebook path is required');
+    }
+    const folder = fs.statSync(notebookPath).isDirectory()
+        ? notebookPath
+        : path.dirname(notebookPath);
+    const error = await shell.openPath(folder);
+    if (error) throw new Error(error);
+    return true;
+});
+
 /**
  * Find the SYSTEM node binary — critically NOT Electron itself.
  *

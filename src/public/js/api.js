@@ -43,4 +43,6 @@ const Api = {
     openNotebook:      (b)      => Api._req('POST',   '/notebooks/open', b),
     createNotebook:    (b)      => Api._req('POST',   '/notebooks/create', b),
     switchNotebook:    (b)      => Api._req('POST',   '/notebooks/switch', b),
+    closeNotebook:     (b)      => Api._req('POST',   '/notebooks/close', b),
+    openNotebookFolder:()       => Api._req('POST',   '/notebooks/current/open-folder'),
 };

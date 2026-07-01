@@ -21,6 +21,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const express = require('express');
 const cors = require('cors');
 const { Notes, Tree, Notebooks, ROOT_ID, getDbPath, getDb } = require('./db');
@@ -86,6 +87,29 @@ function db_parents(noteId) {
         WHERE r.noteId = ? AND r.isDeleted = 0`).all(noteId);
 }
 
+function openFolderInSystemExplorer(notebookPath) {
+    if (!notebookPath || typeof notebookPath !== 'string') {
+        throw new Error('notebook path is required');
+    }
+    const folder = fs.statSync(notebookPath).isDirectory()
+        ? notebookPath
+        : path.dirname(notebookPath);
+    if (!fs.existsSync(folder)) throw new Error('notebook folder not found');
+
+    const command = process.platform === 'darwin'
+        ? 'open'
+        : process.platform === 'win32'
+            ? 'explorer.exe'
+            : 'xdg-open';
+    const child = spawn(command, [folder], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+    });
+    child.on('error', () => {});
+    child.unref();
+}
+
 // ---------------------------------------------------------------------------
 //  Notebooks
 // ---------------------------------------------------------------------------
@@ -114,6 +138,19 @@ app.post('/api/notebooks/create', (req, res) => {
 app.post('/api/notebooks/switch', (req, res) => {
     try {
         res.json(Notebooks.open(req.body?.path));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/close', (req, res) => {
+    try {
+        res.json(Notebooks.close(req.body?.path));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/current/open-folder', (_req, res) => {
+    try {
+        openFolderInSystemExplorer(Notebooks.current().path);
+        res.json({ ok: true });
     } catch (e) { res.status(400).json({ error: e.message }); }
 });
 

@@ -19,4 +19,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openNotebookFile: () => ipcRenderer.invoke('dialog:open-notebook'),
     createNotebookFile: (defaultPath) => ipcRenderer.invoke('dialog:create-notebook', defaultPath),
     chooseNotebookFolder: () => ipcRenderer.invoke('dialog:choose-notebook-folder'),
+    openNotebookFolder: (notebookPath) => ipcRenderer.invoke('shell:open-notebook-folder', notebookPath),
 });
