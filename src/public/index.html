@@ -193,7 +193,7 @@
                                 <div class="settings-copy">
                                     <label>Import Notebook</label>
                                 </div>
-                                <div class="settings-import-control notebook-submenu">
+                                <div class="settings-data-menu notebook-submenu">
                                     <button class="notebook-submenu-trigger" type="button" aria-haspopup="menu">
                                         <i class="bx bx-import"></i>
                                         <span>Import Notebook</span>
@@ -202,7 +202,22 @@
                                     <div class="notebook-submenu-menu" role="menu" aria-label="Import notebook from">
                                         <button data-import-type="html" type="button" role="menuitem"><i class="bx bx-code-alt"></i> HTML</button>
                                         <button data-import-type="markdown" type="button" role="menuitem"><i class="bx bx-text"></i> Markdown</button>
-                                        <button data-import-type="pdf" type="button" role="menuitem"><i class="bx bxs-file-pdf"></i> PDF</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-row settings-row-stack">
+                                <div class="settings-copy">
+                                    <label>Export Notebook</label>
+                                </div>
+                                <div class="settings-data-menu notebook-submenu">
+                                    <button class="notebook-submenu-trigger" type="button" aria-haspopup="menu">
+                                        <i class="bx bx-export"></i>
+                                        <span>Export Notebook</span>
+                                        <i class="bx bx-chevron-right"></i>
+                                    </button>
+                                    <div class="notebook-submenu-menu" role="menu" aria-label="Export notebook to">
+                                        <button data-export-type="html" type="button" role="menuitem"><i class="bx bx-code-alt"></i> HTML</button>
+                                        <button data-export-type="markdown" type="button" role="menuitem"><i class="bx bx-text"></i> Markdown</button>
                                     </div>
                                 </div>
                             </div>
@@ -367,6 +382,68 @@
                 <button class="btn btn-primary" data-close>Close</button>
             </div>
         </div>
+    </div>
+
+    <!-- ====================== EXPORT MODAL ====================== -->
+    <div id="exportNotebookOverlay" class="modal-overlay" hidden>
+        <form id="exportNotebookForm" class="modal export-modal">
+            <div class="modal-header">
+                <h3><i class="bx bx-export"></i> <span id="exportNotebookTitle">Export Notebook</span></h3>
+                <button class="modal-close" data-export-cancel type="button" aria-label="Close">
+                    <i class="bx bx-x"></i><span class="close-x-fallback">x</span>
+                </button>
+            </div>
+            <div class="modal-body export-form">
+                <label>
+                    <span>Export name</span>
+                    <input id="exportNotebookName" type="text" autocomplete="off" required />
+                </label>
+                <label>
+                    <span>Export to</span>
+                    <div class="settings-folder-control export-folder-control">
+                        <input id="exportNotebookFolder" type="text" autocomplete="off" required />
+                        <button id="chooseExportNotebookFolderBtn" type="button" title="Choose folder" aria-label="Choose export folder">
+                            <i class="bx bx-folder-open"></i>
+                        </button>
+                    </div>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" data-export-cancel type="button">Cancel</button>
+                <button class="btn btn-primary" type="submit">Export</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ====================== NOTEBOOK IMPORT MODAL ====================== -->
+    <div id="importHtmlNotebookOverlay" class="modal-overlay" hidden>
+        <form id="importHtmlNotebookForm" class="modal transfer-modal">
+            <div class="modal-header">
+                <h3><i id="importNotebookIcon" class="bx bx-code-alt"></i> <span id="importNotebookTitle">Import HTML Notebook</span></h3>
+                <button class="modal-close" data-import-html-cancel type="button" aria-label="Close">
+                    <i class="bx bx-x"></i><span class="close-x-fallback">x</span>
+                </button>
+            </div>
+            <div class="modal-body export-form">
+                <label>
+                    <span>Notebook name</span>
+                    <input id="importHtmlNotebookName" type="text" autocomplete="off" required />
+                </label>
+                <label>
+                    <span id="importNotebookFolderLabel">HTML folder</span>
+                    <div class="settings-folder-control export-folder-control">
+                        <input id="importHtmlNotebookFolder" type="text" autocomplete="off" required />
+                        <button id="chooseImportHtmlNotebookFolderBtn" type="button" title="Choose folder" aria-label="Choose HTML import folder">
+                            <i class="bx bx-folder-open"></i>
+                        </button>
+                    </div>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" data-import-html-cancel type="button">Cancel</button>
+                <button class="btn btn-primary" type="submit">Import</button>
+            </div>
+        </form>
     </div>
 
     <!-- ====================== SCRIPTS ====================== -->

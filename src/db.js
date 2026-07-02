@@ -133,6 +133,32 @@ function uniqueNotebookPath(folderPath, name) {
     return candidate;
 }
 
+function safeFilenamePart(value, fallback = 'Untitled') {
+    const clean = String(value || '')
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/[\x00-\x1f\x7f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^\.+$/, '');
+    return (clean || fallback).slice(0, 96).trim() || fallback;
+}
+
+function uniqueFilesystemPath(dirPath, baseName, ext = '') {
+    const safeBase = safeFilenamePart(baseName);
+    let candidate = path.join(dirPath, `${safeBase}${ext}`);
+    let index = 2;
+    while (fs.existsSync(candidate)) {
+        candidate = path.join(dirPath, `${safeBase} ${index}${ext}`);
+        index += 1;
+    }
+    return candidate;
+}
+
+function uniqueExportDirectory(parentPath, notebookName, format, exportName = null) {
+    const label = format === 'html' ? 'HTML' : 'Markdown';
+    return uniqueFilesystemPath(parentPath, exportName || `${notebookName} ${label} Export`);
+}
+
 function escapeHtmlText(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -242,6 +268,155 @@ function markdownToHtml(markdown) {
     closeList();
     html.push('<p><br></p>');
     return html.join('\n') || '<p><br></p>';
+}
+
+function decodeHtmlEntities(value) {
+    return String(value || '')
+        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+        .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+}
+
+function htmlInlineToMarkdown(html) {
+    let value = String(html || '');
+    value = value.replace(/<br\s*\/?>/gi, '\n');
+    value = value.replace(/<a\b[^>]*href=["']?([^"'>\s]+)["']?[^>]*>([\s\S]*?)<\/a>/gi,
+        (_, href, text) => `[${htmlInlineToMarkdown(text).trim()}](${decodeHtmlEntities(href)})`);
+    value = value.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi,
+        (_, _tag, text) => `**${htmlInlineToMarkdown(text).trim()}**`);
+    value = value.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi,
+        (_, _tag, text) => `*${htmlInlineToMarkdown(text).trim()}*`);
+    value = value.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi,
+        (_, text) => `\`${decodeHtmlEntities(text).replace(/\s+/g, ' ').trim()}\``);
+    value = value.replace(/<[^>]+>/g, '');
+    return decodeHtmlEntities(value).replace(/[ \t]+/g, ' ');
+}
+
+function htmlTableToMarkdown(tableHtml) {
+    const rows = [...String(tableHtml || '').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)]
+        .map(match => [...match[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)]
+            .map(cell => htmlInlineToMarkdown(cell[1]).replace(/\s*\n+\s*/g, ' ').trim()))
+        .filter(row => row.length);
+    if (!rows.length) return '';
+    const columnCount = Math.max(...rows.map(row => row.length));
+    const normalize = row => Array.from({ length: columnCount }, (_, i) => row[i] || '');
+    const lines = [];
+    lines.push(`| ${normalize(rows[0]).join(' | ')} |`);
+    lines.push(`| ${Array.from({ length: columnCount }, () => '---').join(' | ')} |`);
+    rows.slice(1).forEach(row => lines.push(`| ${normalize(row).join(' | ')} |`));
+    return `\n\n${lines.join('\n')}\n\n`;
+}
+
+function htmlToMarkdown(html) {
+    if (!html) return '';
+    const codeBlocks = [];
+    let value = String(html).replace(/\r\n?/g, '\n');
+
+    value = value.replace(/<pre\b[^>]*>\s*<code\b[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, (_, code) => {
+        const token = `@@NOTE_EXPORT_CODE_${codeBlocks.length}@@`;
+        codeBlocks.push(decodeHtmlEntities(code).replace(/\n+$/g, ''));
+        return `\n\n${token}\n\n`;
+    });
+    value = value.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_, table) => htmlTableToMarkdown(table));
+    value = value.replace(/<div\b[^>]*class=["'][^"']*editor-divider-block[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '\n\n---\n\n');
+    value = value.replace(/<hr\b[^>]*>/gi, '\n\n---\n\n');
+    value = value.replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi,
+        (_, level, text) => `\n\n${'#'.repeat(Number(level))} ${htmlInlineToMarkdown(text).trim()}\n\n`);
+    value = value.replace(/<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>/gi,
+        (_, text) => `\n\n${htmlInlineToMarkdown(text).trim().split('\n').map(line => `> ${line}`).join('\n')}\n\n`);
+    value = value.replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, (_, item) => {
+        const checked = /<input\b[^>]*checked/i.test(item) ? '[x] ' : /<input\b/i.test(item) ? '[ ] ' : '';
+        const clean = item.replace(/<input\b[^>]*>/gi, '');
+        return `\n- ${checked}${htmlInlineToMarkdown(clean).trim()}`;
+    });
+    value = value.replace(/<\/?(ul|ol)\b[^>]*>/gi, '\n');
+    value = value.replace(/<\/(p|div|section)>/gi, '\n\n');
+    value = value.replace(/<br\s*\/?>/gi, '\n');
+    value = htmlInlineToMarkdown(value);
+    value = value.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    codeBlocks.forEach((code, index) => {
+        value = value.replace(`@@NOTE_EXPORT_CODE_${index}@@`, `\`\`\`\n${code}\n\`\`\``);
+    });
+    return value.trim();
+}
+
+function htmlDocumentForNote(noteTitle, noteContent, notebookName) {
+    return `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtmlText(noteTitle)}</title>
+    <style>
+        body { color: #202124; font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #fff; }
+        main { max-width: 760px; margin: 40px auto; padding: 0 24px 56px; }
+        h1 { font-size: 32px; line-height: 1.2; margin: 0 0 24px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #d6d6d6; padding: 6px 8px; text-align: left; vertical-align: top; }
+        pre { background: #f5f5f5; border-radius: 6px; overflow: auto; padding: 12px; }
+        blockquote { border-left: 3px solid #d0d7de; color: #57606a; margin-left: 0; padding-left: 14px; }
+        .editor-divider-block::before { content: ""; display: block; border-top: 1px solid #d6d6d6; margin: 20px 0; }
+        .export-meta { color: #6b7280; font-size: 12px; margin-top: 40px; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>${escapeHtmlText(noteTitle)}</h1>
+        <article>${noteContent || '<p><br></p>'}</article>
+        <div class="export-meta">Exported from ${escapeHtmlText(notebookName)}</div>
+    </main>
+</body>
+</html>
+`;
+}
+
+function noteMarkdownDocument(noteTitle, noteContent) {
+    const body = htmlToMarkdown(noteContent);
+    return `# ${String(noteTitle || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled'}\n${body ? `\n${body}\n` : '\n'}`;
+}
+
+function isBlankNoteContent(content) {
+    const value = String(content || '')
+        .replace(/<br\s*\/?>/gi, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/<[^>]+>/g, '')
+        .trim();
+    return !value && !/<(img|table|hr|pre|input)\b/i.test(String(content || '')) &&
+        !/editor-divider-block/i.test(String(content || ''));
+}
+
+function stripHtmlTags(value) {
+    return decodeHtmlEntities(String(value || '').replace(/<[^>]+>/g, ''))
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function titleFromHtml(filePath, html) {
+    const title = String(html || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+    if (title && stripHtmlTags(title[1])) return stripHtmlTags(title[1]);
+    const h1 = String(html || '').match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+    if (h1 && stripHtmlTags(h1[1])) return stripHtmlTags(h1[1]);
+    return titleFromMarkdownPath(filePath);
+}
+
+function htmlFragmentForImport(html) {
+    let fragment = String(html || '');
+    const article = fragment.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+    const body = fragment.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
+    fragment = article?.[1] || body?.[1] || fragment;
+    fragment = fragment
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, '')
+        .replace(/<meta\b[^>]*>/gi, '')
+        .replace(/<link\b[^>]*>/gi, '')
+        .trim();
+    return fragment || '<p><br></p>';
 }
 
 function readNotebookConfig() {
@@ -525,6 +700,49 @@ function readMarkdownImportTree(folderPath) {
     return { root, tree, markdownCount };
 }
 
+function readHtmlImportTree(folderPath) {
+    const root = path.resolve(folderPath);
+    const stat = fs.statSync(root);
+    if (!stat.isDirectory()) throw new Error('html import source must be a folder');
+
+    const readDir = (dirPath) => {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+            .filter(entry => !entry.name.startsWith('.'))
+            .sort((a, b) => {
+                if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+                return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+            });
+        const dirs = [];
+        const files = [];
+        for (const entry of entries) {
+            const entryPath = path.join(dirPath, entry.name);
+            if (entry.isDirectory()) {
+                const child = readDir(entryPath);
+                if (child.dirs.length || child.files.length) dirs.push(child);
+            } else if (entry.isFile() && ['.html', '.htm'].includes(path.extname(entry.name).toLowerCase())) {
+                const html = fs.readFileSync(entryPath, 'utf8');
+                files.push({
+                    path: entryPath,
+                    title: titleFromHtml(entryPath, html),
+                    content: htmlFragmentForImport(html),
+                });
+            }
+        }
+        return {
+            path: dirPath,
+            title: titleFromMarkdownPath(dirPath),
+            dirs,
+            files,
+        };
+    };
+
+    const tree = readDir(root);
+    const countFiles = (node) => node.files.length + node.dirs.reduce((sum, child) => sum + countFiles(child), 0);
+    const htmlCount = countFiles(tree);
+    if (!htmlCount) throw new Error('no html files found in selected folder');
+    return { root, tree, htmlCount };
+}
+
 function insertImportedNote(stmts, { title, content, parentId, icon = null }) {
     const noteId = newId();
     stmts.noteInsert.run({
@@ -567,6 +785,100 @@ function importMarkdownTree(tree, parentId, counters) {
         });
         counters.files += 1;
     }
+}
+
+function importHtmlTree(tree, parentId, counters) {
+    const stmts = getStmts();
+    for (const dir of tree.dirs) {
+        const dirNoteId = insertImportedNote(stmts, {
+            title: dir.title,
+            content: '<p><br></p>',
+            parentId,
+            icon: 'bx bx-folder',
+        });
+        counters.folders += 1;
+        importHtmlTree(dir, dirNoteId, counters);
+    }
+    for (const file of tree.files) {
+        insertImportedNote(stmts, {
+            title: file.title,
+            content: file.content,
+            parentId,
+            icon: 'bx bx-code-alt',
+        });
+        counters.files += 1;
+    }
+}
+
+function notebookExportTree(parentId = ROOT_ID, { maxDepth = 32 } = {}) {
+    const stmts = getStmts();
+    const build = (pid, depth, seen) => {
+        if (depth > maxDepth) return [];
+        return stmts.relChildren.all(pid)
+            .filter(row => !row.isDeleted)
+            .map((row) => {
+                const note = stmts.noteGet.get(row.noteId);
+                if (!note || note.isDeleted) return null;
+                const title = row.prefix ? `${row.prefix} - ${note.title}` : note.title;
+                return {
+                    noteId: row.noteId,
+                    title: title || 'Untitled',
+                    content: note.content || '',
+                    children: seen.has(row.noteId)
+                        ? []
+                        : build(row.noteId, depth + 1, new Set(seen).add(row.noteId)),
+                };
+            })
+            .filter(Boolean);
+    };
+    return build(parentId, 0, new Set([parentId]));
+}
+
+function writeExportNode(node, dirPath, format, notebookName, counters) {
+    const ext = format === 'html' ? '.html' : '.md';
+    const hasChildren = node.children.length > 0;
+    const hasContent = !isBlankNoteContent(node.content);
+    const shouldWriteFile = format === 'html' || hasContent || !hasChildren;
+
+    if (shouldWriteFile) {
+        const filePath = uniqueFilesystemPath(dirPath, node.title, ext);
+        const body = format === 'html'
+            ? htmlDocumentForNote(node.title, node.content, notebookName)
+            : noteMarkdownDocument(node.title, node.content);
+        fs.writeFileSync(filePath, body, 'utf8');
+        counters.files += 1;
+    }
+
+    if (hasChildren) {
+        const childDir = uniqueFilesystemPath(dirPath, node.title);
+        fs.mkdirSync(childDir, { recursive: true });
+        counters.folders += 1;
+        node.children.forEach(child => writeExportNode(child, childDir, format, notebookName, counters));
+    }
+}
+
+function exportNotebookFolder(format, folderPath, notebook, exportName = null) {
+    const outputFormat = String(format || '').toLowerCase();
+    if (!['html', 'markdown'].includes(outputFormat)) throw new Error('export format must be html or markdown');
+    if (!folderPath || typeof folderPath !== 'string') throw new Error('export folder is required');
+
+    const parentPath = path.resolve(folderPath);
+    fs.mkdirSync(parentPath, { recursive: true });
+    if (!fs.statSync(parentPath).isDirectory()) throw new Error('export folder must be a folder');
+
+    const cleanExportName = exportName == null ? null : safeFilenamePart(exportName, '');
+    if (exportName != null && !cleanExportName) throw new Error('export name is required');
+
+    const exportPath = uniqueExportDirectory(parentPath, notebook.name, outputFormat, cleanExportName);
+    fs.mkdirSync(exportPath, { recursive: true });
+
+    const counters = { files: 0, folders: 0 };
+    notebookExportTree().forEach(node => writeExportNode(node, exportPath, outputFormat, notebook.name, counters));
+    return {
+        format: outputFormat,
+        path: exportPath,
+        exported: counters,
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -815,14 +1127,15 @@ const Notebooks = {
         return this.list();
     },
 
-    importMarkdownFolder(folderPath) {
+    importMarkdownFolder(folderPath, notebookName = null) {
         const source = readMarkdownImportTree(folderPath);
         const config = readNotebookConfig();
         const defaultFolder = config.defaultNotebookFolder || path.dirname(getDbPath());
         fs.mkdirSync(defaultFolder, { recursive: true });
 
-        const notebookName = titleFromMarkdownPath(source.root);
-        const dbPath = uniqueNotebookPath(defaultFolder, notebookName);
+        const cleanName = String(notebookName || titleFromMarkdownPath(source.root)).trim();
+        if (!cleanName) throw new Error('notebook name is required');
+        const dbPath = uniqueNotebookPath(defaultFolder, cleanName);
         const previous = state;
         const next = createConnection(dbPath);
         const counters = { files: 0, folders: 0 };
@@ -830,7 +1143,7 @@ const Notebooks = {
         state = next;
         try {
             const stmts = getStmts();
-            stmts.notebookNameSet.run({ name: notebookName });
+            stmts.notebookNameSet.run({ name: cleanName });
             stmts.notebookIconSet.run({ icon: 'bx bx-import' });
             getDb().transaction(() => {
                 importMarkdownTree(source.tree, ROOT_ID, counters);
@@ -850,6 +1163,52 @@ const Notebooks = {
             }
             throw err;
         }
+    },
+
+    importHtmlFolder(folderPath, notebookName) {
+        const source = readHtmlImportTree(folderPath);
+        const cleanName = String(notebookName || '').trim();
+        if (!cleanName) throw new Error('notebook name is required');
+
+        const config = readNotebookConfig();
+        const defaultFolder = config.defaultNotebookFolder || path.dirname(getDbPath());
+        fs.mkdirSync(defaultFolder, { recursive: true });
+
+        const dbPath = uniqueNotebookPath(defaultFolder, cleanName);
+        const previous = state;
+        const next = createConnection(dbPath);
+        const counters = { files: 0, folders: 0 };
+
+        state = next;
+        try {
+            const stmts = getStmts();
+            stmts.notebookNameSet.run({ name: cleanName });
+            stmts.notebookIconSet.run({ icon: 'bx bx-code-alt' });
+            getDb().transaction(() => {
+                importHtmlTree(source.tree, ROOT_ID, counters);
+            })();
+            upsertOpenedNotebook(state.dbPath, this.current());
+            try { previous.db.close(); } catch (_) {}
+            return {
+                current: this.current(),
+                opened: this.list().opened,
+                imported: counters,
+            };
+        } catch (err) {
+            try { next.db.close(); } catch (_) {}
+            state = previous;
+            for (const suffix of ['', '-wal', '-shm']) {
+                try { fs.unlinkSync(dbPath + suffix); } catch (_) {}
+            }
+            throw err;
+        }
+    },
+
+    export(folderPath, format, exportName = null) {
+        return {
+            current: this.current(),
+            ...exportNotebookFolder(format, folderPath, this.current(), exportName),
+        };
     },
 };
 

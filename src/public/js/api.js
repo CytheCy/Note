@@ -49,5 +49,7 @@ const Api = {
     switchNotebook:    (b)      => Api._req('POST',   '/notebooks/switch', b),
     closeNotebook:     (b)      => Api._req('POST',   '/notebooks/close', b),
     importMarkdownNotebook:(b)  => Api._req('POST',   '/notebooks/import/markdown', b),
+    importHtmlNotebook:(b)      => Api._req('POST',   '/notebooks/import/html', b),
+    exportNotebook:    (b)      => Api._req('POST',   '/notebooks/export', b),
     openNotebookFolder:()       => Api._req('POST',   '/notebooks/current/open-folder'),
 };

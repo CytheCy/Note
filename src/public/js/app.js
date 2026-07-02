@@ -6,6 +6,11 @@ let lastNotebookState = null;
 let appSettings = null;
 let selectedNotebookIcon = 'bx bx-book-open';
 let notebookIconChoicesPromise = null;
+let exportDialogResolve = null;
+let exportDialogInitialized = false;
+let importHtmlDialogResolve = null;
+let importHtmlDialogInitialized = false;
+let importNotebookDialogType = 'html';
 const NOTEBOOK_BOXICONS_CSS = 'https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css';
 const NOTEBOOK_FALLBACK_ICONS = [
     'bx bx-book-open', 'bx bx-book', 'bx bx-notepad', 'bx bx-folder', 'bx bx-briefcase',
@@ -273,6 +278,8 @@ function openSettings() {
 function initSettings() {
     // Ensure the saved theme is reflected in the UI on first paint.
     applyTheme(getStoredTheme());
+    initExportNotebookDialog();
+    initImportHtmlNotebookDialog();
 
     // Clicking an option card switches the theme immediately and persists it.
     document.getElementById('themeOptions').addEventListener('click', (e) => {
@@ -305,11 +312,13 @@ function initSettings() {
 
     document.querySelector('[data-settings-section="data"]').addEventListener('click', async (e) => {
         const importButton = e.target.closest('button[data-import-type]');
-        if (!importButton) return;
+        const exportButton = e.target.closest('button[data-export-type]');
+        if (!importButton && !exportButton) return;
         try {
-            await runNotebookImport(importButton.dataset.importType);
+            if (importButton) await runNotebookImport(importButton.dataset.importType);
+            if (exportButton) await runNotebookExport(exportButton.dataset.exportType);
         } catch (err) {
-            alert('Notebook import failed: ' + err.message);
+            alert(`Notebook ${importButton ? 'import' : 'export'} failed: ${err.message}`);
         }
     });
 }
@@ -481,10 +490,25 @@ async function runNotebookAction(action) {
 }
 
 async function runNotebookImport(type) {
+    if (type === 'html') {
+        const target = await showImportNotebookDialog('html');
+        if (!target) return;
+        const result = await Api.importHtmlNotebook({
+            folderPath: target.folderPath,
+            notebookName: target.notebookName,
+        });
+        await afterNotebookChanged();
+        alert(`Imported ${result.imported.files} HTML file${result.imported.files === 1 ? '' : 's'} into ${result.current.name}.`);
+        return;
+    }
+
     if (type === 'markdown') {
-        const folderPath = await chooseNotebookFolder();
-        if (!folderPath) return;
-        const result = await Api.importMarkdownNotebook({ folderPath });
+        const target = await showImportNotebookDialog('markdown');
+        if (!target) return;
+        const result = await Api.importMarkdownNotebook({
+            folderPath: target.folderPath,
+            notebookName: target.notebookName,
+        });
         await afterNotebookChanged();
         alert(`Imported ${result.imported.files} markdown file${result.imported.files === 1 ? '' : 's'} into ${result.current.name}.`);
         return;
@@ -493,10 +517,192 @@ async function runNotebookImport(type) {
     const labels = {
         html: 'HTML',
         markdown: 'Markdown',
-        pdf: 'PDF',
     };
     const label = labels[type] || 'Notebook';
     alert(`${label} notebook import is not implemented yet.`);
+}
+
+function initImportHtmlNotebookDialog() {
+    if (importHtmlDialogInitialized) return;
+    importHtmlDialogInitialized = true;
+
+    const overlay = document.getElementById('importHtmlNotebookOverlay');
+    const form = document.getElementById('importHtmlNotebookForm');
+    const folderInput = document.getElementById('importHtmlNotebookFolder');
+    const chooseFolderBtn = document.getElementById('chooseImportHtmlNotebookFolderBtn');
+    if (!overlay || !form || !folderInput || !chooseFolderBtn) return;
+
+    chooseFolderBtn.addEventListener('click', async () => {
+        const folder = await chooseNotebookFolder();
+        if (!folder) return;
+        folderInput.value = folder;
+        const nameInput = document.getElementById('importHtmlNotebookName');
+        if (nameInput && !nameInput.value.trim()) {
+            const fallback = importNotebookDialogType === 'markdown' ? 'Imported Markdown' : 'Imported HTML';
+            nameInput.value = safeExportName(filenameFromPath(folder) || fallback);
+        }
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const notebookName = document.getElementById('importHtmlNotebookName').value.trim();
+        const folderPath = folderInput.value.trim();
+        if (!notebookName) return alert('Notebook name is required.');
+        const folderLabel = importNotebookDialogType === 'markdown' ? 'Markdown folder' : 'HTML folder';
+        if (!folderPath) return alert(`${folderLabel} is required.`);
+        closeImportHtmlNotebookDialog({ notebookName, folderPath });
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('[data-import-html-cancel]')) {
+            closeImportHtmlNotebookDialog(null);
+        }
+    });
+    overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeImportHtmlNotebookDialog(null);
+    });
+}
+
+async function showImportNotebookDialog(type) {
+    initImportHtmlNotebookDialog();
+    importNotebookDialogType = type === 'markdown' ? 'markdown' : 'html';
+    const overlay = document.getElementById('importHtmlNotebookOverlay');
+    const icon = document.getElementById('importNotebookIcon');
+    const title = document.getElementById('importNotebookTitle');
+    const folderLabel = document.getElementById('importNotebookFolderLabel');
+    const nameInput = document.getElementById('importHtmlNotebookName');
+    const folderInput = document.getElementById('importHtmlNotebookFolder');
+    if (!overlay || !nameInput || !folderInput) return null;
+
+    const labels = {
+        html: { title: 'Import HTML Notebook', folder: 'HTML folder', name: 'Imported HTML', icon: 'bx bx-code-alt' },
+        markdown: { title: 'Import Markdown Notebook', folder: 'Markdown folder', name: 'Imported Markdown', icon: 'bx bx-text' },
+    };
+    const label = labels[importNotebookDialogType];
+    if (icon) icon.className = label.icon;
+    if (title) title.textContent = label.title;
+    if (folderLabel) folderLabel.textContent = label.folder;
+    nameInput.value = label.name;
+    folderInput.value = '';
+
+    if (importHtmlDialogResolve) importHtmlDialogResolve(null);
+    overlay.hidden = false;
+    requestAnimationFrame(() => {
+        folderInput.focus();
+    });
+
+    return new Promise(resolve => {
+        importHtmlDialogResolve = resolve;
+    });
+}
+
+function closeImportHtmlNotebookDialog(value) {
+    const overlay = document.getElementById('importHtmlNotebookOverlay');
+    if (overlay) overlay.hidden = true;
+    const resolve = importHtmlDialogResolve;
+    importHtmlDialogResolve = null;
+    if (resolve) resolve(value);
+}
+
+async function runNotebookExport(type) {
+    const target = await showExportNotebookDialog(type);
+    if (!target) return;
+    const result = await Api.exportNotebook({
+        folderPath: target.folderPath,
+        exportName: target.exportName,
+        format: type,
+    });
+    const labels = {
+        html: 'HTML',
+        markdown: 'Markdown',
+    };
+    const label = labels[type] || 'Notebook';
+    const fileLabel = result.exported.files === 1 ? 'file' : 'files';
+    alert(`Exported ${result.exported.files} ${label} ${fileLabel} to ${result.path}.`);
+}
+
+function initExportNotebookDialog() {
+    if (exportDialogInitialized) return;
+    exportDialogInitialized = true;
+
+    const overlay = document.getElementById('exportNotebookOverlay');
+    const form = document.getElementById('exportNotebookForm');
+    const folderInput = document.getElementById('exportNotebookFolder');
+    const chooseFolderBtn = document.getElementById('chooseExportNotebookFolderBtn');
+    if (!overlay || !form || !folderInput || !chooseFolderBtn) return;
+
+    chooseFolderBtn.addEventListener('click', async () => {
+        const folder = await chooseNotebookFolder();
+        if (folder) folderInput.value = folder;
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const exportName = document.getElementById('exportNotebookName').value.trim();
+        const folderPath = folderInput.value.trim();
+        if (!exportName) return alert('Export name is required.');
+        if (!folderPath) return alert('Export folder is required.');
+        closeExportNotebookDialog({ exportName, folderPath });
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay || e.target.closest('[data-export-cancel]')) {
+            closeExportNotebookDialog(null);
+        }
+    });
+    overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeExportNotebookDialog(null);
+    });
+}
+
+async function showExportNotebookDialog(type) {
+    initExportNotebookDialog();
+    const overlay = document.getElementById('exportNotebookOverlay');
+    const title = document.getElementById('exportNotebookTitle');
+    const nameInput = document.getElementById('exportNotebookName');
+    const folderInput = document.getElementById('exportNotebookFolder');
+    if (!overlay || !nameInput || !folderInput) return null;
+
+    const state = lastNotebookState || await Api.getNotebooks();
+    const notebook = state.current || {};
+    const labels = {
+        html: 'HTML',
+        markdown: 'Markdown',
+    };
+    const label = labels[type] || 'Notebook';
+    const defaultFolder = appSettings?.defaultNotebookFolder || dirnameFromPath(notebook.path || '') || '';
+    const defaultName = `${safeExportName(notebook.name || 'Notebook')} ${label} Export`;
+
+    if (title) title.textContent = `Export Notebook to ${label}`;
+    nameInput.value = defaultName;
+    folderInput.value = defaultFolder;
+
+    if (exportDialogResolve) exportDialogResolve(null);
+    overlay.hidden = false;
+    requestAnimationFrame(() => {
+        nameInput.focus();
+        nameInput.select();
+    });
+
+    return new Promise(resolve => {
+        exportDialogResolve = resolve;
+    });
+}
+
+function closeExportNotebookDialog(value) {
+    const overlay = document.getElementById('exportNotebookOverlay');
+    if (overlay) overlay.hidden = true;
+    const resolve = exportDialogResolve;
+    exportDialogResolve = null;
+    if (resolve) resolve(value);
+}
+
+function safeExportName(name) {
+    return (name || 'Notebook')
+        .trim()
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, ' ')
+        .replace(/^\.+$/, 'Notebook') || 'Notebook';
 }
 
 function initEditNotebookPanel() {

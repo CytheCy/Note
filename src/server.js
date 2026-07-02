@@ -149,7 +149,19 @@ app.post('/api/notebooks/close', (req, res) => {
 
 app.post('/api/notebooks/import/markdown', (req, res) => {
     try {
-        res.status(201).json(Notebooks.importMarkdownFolder(req.body?.folderPath));
+        res.status(201).json(Notebooks.importMarkdownFolder(req.body?.folderPath, req.body?.notebookName));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/import/html', (req, res) => {
+    try {
+        res.status(201).json(Notebooks.importHtmlFolder(req.body?.folderPath, req.body?.notebookName));
+    } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/notebooks/export', (req, res) => {
+    try {
+        res.json(Notebooks.export(req.body?.folderPath, req.body?.format, req.body?.exportName));
     } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
